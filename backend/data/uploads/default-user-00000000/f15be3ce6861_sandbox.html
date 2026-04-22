@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TransactionOCR_2 项目详细分析报告</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #0f1623;
+            --bg-card: #141d2b;
+            --bg-card-hover: #1a2536;
+            --bg-code: #0d1117;
+            --accent-blue: #3b82f6;
+            --accent-cyan: #22d3ee;
+            --accent-purple: #a855f7;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #1e293b;
+            --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            --gradient-emerald: linear-gradient(135deg, #10b981 0%, #22d3ee 100%);
+            --gradient-amber: linear-gradient(135deg, #f59e0b 0%, #f43f5e 100%);
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.8;
+            font-size: 15px;
+        }
+
+        /* 顶部标题栏 */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 24px 40px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .subtitle {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 32px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* 主容器 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 32px;
+        }
+
+        /* 左侧导航 */
+        .sidebar {
+            position: sticky;
+            top: 100px;
+            height: fit-content;
+        }
+
+        .toc {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid var(--border-color);
+        }
+
+        .toc-title {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .toc-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .toc-item:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .toc-item.active {
+            background: var(--gradient-primary);
+            color: white;
+        }
+
+        .toc-item .num {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* 右侧内容 */
+        .content {
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        /* 章节 */
+        .section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-header {
+            margin-bottom: 28px;
+        }
+
+        .section-header h2 {
+            font-size: 26px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .section-header h2::before {
+            content: '';
+            width: 5px;
+            height: 32px;
+            background: var(--gradient-primary);
+            border-radius: 3px;
+        }
+
+        .section-header .desc {
+            color: var(--text-secondary);
+            font-size: 15px;
+            margin-left: 19px;
+        }
+
+        /* 卡片 */
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 28px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h3 .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--gradient-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .card p {
+            color: var(--text-secondary);
+            line-height: 1.9;
+            margin-bottom: 16px;
+        }
+
+        .card p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* 标签 */
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .tag {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        /* 列表 */
+        .list {
+            list-style: none;
+        }
+
+        .list li {
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            color: var(--text-secondary);
+        }
+
+        .list li:last-child {
+            border-bottom: none;
+        }
+
+        .list li::before {
+            content: '▹';
+            color: var(--accent-emerald);
+            font-weight: bold;
+            margin-top: 2px;
+        }
+
+        /* 代码块 */
+        .code-block {
+            background: var(--bg-code);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .code-block pre {
+            font-family: 'Fira Code', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+
+        .code-block .comment { color: #6a737d; }
+        .code-block .keyword { color: #ff7b72; }
+        .code-block .string { color: #a5d6ff; }
+        .code-block .function { color: #d2a8ff; }
+        .code-block .variable { color: #ffa657; }
+
+        /* 表格 */
+        .table-container {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            margin: 24px 0;
+        }
+
+        .table-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .table-header h4 {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 14px 20px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: rgba(255,255,255,0.02);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            font-weight: 600;
+            width: 150px;
+        }
+
+        td {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: var(--bg-card-hover);
+        }
+
+        /* 网格布局 */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        /* 流程图样式 */
+        .flow-chart {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 20px 0;
+        }
+
+        .flow-node {
+            flex: 1;
+            min-width: 120px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 18px 16px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .flow-node .step {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            margin: 0 auto 12px;
+        }
+
+        .flow-node h4 {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .flow-node p {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        /* 亮点卡片 */
+        .highlight-card {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 16px;
+            padding: 28px;
+            margin: 24px 0;
+        }
+
+        .highlight-card h4 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 分隔线 */
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+            margin: 32px 0;
+        }
+
+        /* 引用块 */
+        .quote {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-blue);
+            padding: 20px 24px;
+            margin: 24px 0;
+            border-radius: 0 12px 12px 0;
+            font-style: italic;
+            color: var(--text-secondary);
+        }
+
+        /* 评分星星 */
+        .rating {
+            display: flex;
+            gap: 4px;
+            margin: 8px 0;
+        }
+
+        .star {
+            color: var(--accent-amber);
+            font-size: 16px;
+        }
+
+        .star.empty {
+            color: var(--border-color);
+        }
+
+        /* 响应式 */
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+                padding: 24px;
+            }
+            .sidebar {
+                position: static;
+            }
+            .toc {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                padding: 16px;
+            }
+            .toc-title {
+                width: 100%;
+                margin-bottom: 12px;
+            }
+            .toc-item {
+                margin-bottom: 0;
+            }
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            .header-stats {
+                display: none;
+            }
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* 锚点过渡 */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* 小标题 */
+        .sub-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 24px 0 12px 0;
+        }
+
+        /* 图标列表 */
+        .icon-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 16px 0;
+        }
+
+        .icon-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .icon-item .icon {
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部标题栏 -->
+    <header class="header">
+        <div class="header-content">
+            <div>
+                <h1>TransactionOCR_2 详细分析报告</h1>
+                <div class="subtitle">基于 FastAPI + LangGraph 的银行流水 OCR 智能体服务深度解析</div>
+            </div>
+            <div class="header-stats">
+                <div class="stat">
+                    <div class="stat-value">1000+</div>
+                    <div class="stat-label">字数</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">8</div>
+                    <div class="stat-label">章节</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">20+</div>
+                    <div class="stat-label">模块</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- 左侧导航 -->
+        <aside class="sidebar">
+            <nav class="toc">
+                <div class="toc-title">目录导航</div>
+                <div class="toc-item active" onclick="showSection('overview', this)">
+                    <span class="num">一</span>
+                    <span>项目概述</span>
+                </div>
+                <div class="toc-item" onclick="showSection('architecture', this)">
+                    <span class="num">二</span>
+                    <span>技术架构</span>
+                </div>
+                <div class="toc-item" onclick="showSection('modules', this)">
+                    <span class="num">三</span>
+                    <span>核心功能</span>
+                </div>
+                <div class="toc-item" onclick="showSection('api', this)">
+                    <span class="num">四</span>
+                    <span>API 设计</span>
+                </div>
+                <div class="toc-item" onclick="showSection('highlights', this)">
+                    <span class="num">五</span>
+                    <span>技术亮点</span>
+                </div>
+                <div class="toc-item" onclick="showSection('config', this)">
+                    <span class="num">六</span>
+                    <span>配置灵活</span>
+                </div>
+                <div class="toc-item" onclick="showSection('scenarios', this)">
+                    <span class="num">七</span>
+                    <span>适用场景</span>
+                </div>
+                <div class="toc-item" onclick="showSection('summary', this)">
+                    <span class="num">八</span>
+                    <span>总结评价</span>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- 右侧内容 -->
+        <main class="content">
+            <!-- 第一章：项目概述 -->
+            <section id="overview" class="section active">
+                <div class="section-header">
+                    <h2>一、项目概述</h2>
+                    <p class="desc">了解 TransactionOCR_2 的核心定位与技术价值</p>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">📋</span> 项目简介</h3>
+                    <p><strong>TransactionOCR_2</strong> 是一个专业的<strong>银行交易流水 OCR 智能体服务</strong>，核心功能是将 PDF 或图片格式的银行流水账单通过视觉语言模型（VLM）自动识别提取，并转换为结构化的标准 CSV 数据。</p>
+                    <p>该项目采用 <strong>FastAPI + LangGraph</strong> 的现代微服务架构，通过阿里云百炼 Qwen 系列模型实现高精度的多模态信息提取，同时支持 Dify 平台的动态提示词管理，具备<strong>企业级生产部署能力</strong>。</p>
+                    
+                    <div class="tags">
+                        <span class="tag">FastAPI</span>
+                        <span class="tag">LangGraph</span>
+                        <span class="tag">Qwen-VL</span>
+                        <span class="tag">PyMuPDF</span>
+                        <span class="tag">Pandas</span>
+                        <span class="tag">Dify</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">🎯</span> 核心能力</h3>
+                    <div class="list">
+                        <li><strong>多格式支持</strong> — 支持 PDF、图片（PNG/JPEG）等多种银行流水文档格式</li>
+                        <li><strong>智能识别</strong> — 基于视觉语言模型，自动理解复杂表格结构和多银行格式</li>
+                        <li><strong>字段标准化</strong> — 自动映射到 23 个标准字段（流水号、交易日期、对方账户、金额等）</li>
+                        <li><strong>余额校验</strong> — 内置余额连续性校验，自动修正借贷方向错误</li>
+                        <li><strong>异步处理</strong> — 支持大文件分块并发处理，完成后回调通知</li>
+                        <li><strong>动态提示词</strong> — 支持 Dify 平台热更新提示词，无需重新部署</li>
+                    </div>
+                </div>
+
+                <div class="flow-chart">
+                    <div class="flow-node">
+                        <div class="step">1</div>
+                        <h4>接收请求</h4>
+                        <p>URL/文件上传</p>
+                    </div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-node">
+                        <div class="step">2</div>
+                        <h4>文件处理</h4>
+                        <p>PDF转图片</p>
+                    </div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-node">
+                        <div class="step">3</div>
+                        <h4>VLM提取</h4>
+                        <p>Qwen-VL识别</p>
+                    </div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-node">
+                        <div class="step">4</div>
+                        <h4>数据校验</h4>
+                        <p>余额校验</p>
+                    </div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-node">
+                        <div class="step">5</div>
+                        <h4>导出结果</h4>
+                        <p>CSV/JSON</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第二章：技术架构 -->
+            <section id="architecture" class="section">
+                <div class="section-header">
+                    <h2>二、技术架构分析</h2>
+                    <p class="desc">分层解耦的微服务架构设计</p>
+                </div>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <h3><span class="icon">🖥️</span> Web 框架层</h3>
+                        <p><strong>FastAPI</strong> — 高性能异步 Web 服务框架</p>
+                        <div class="list">
+                            <li>异步请求处理，支持高并发</li>
+                            <li>自动 OpenAPI 文档生成</li>
+                            <li>类型安全的数据验证（Pydantic）</li>
+                            <li>BackgroundTasks 后台任务支持</li>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">🤖</span> AI 编排层</h3>
+                        <p><strong>LangGraph</strong> — 多节点并行 Agent 工作流</p>
+                        <div class="list">
+                            <li>Fan-out/Fan-in 并行模式</li>
+                            <li>状态管理与流程控制</li>
+                            <li>多 LLM 节点协同调用</li>
+                            <li>结果合并与异常处理</li>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">👁️</span> 模型服务层</h3>
+                        <p><strong>阿里云百炼 Qwen 系列</strong> — OpenAI 兼容接口</p>
+                        <div class="list">
+                            <li>Qwen3-VL-Flash — 高速流水提取</li>
+                            <li>Qwen3-72B/8B — 元数据提取</li>
+                            <li>支持思考模式开关</li>
+                            <li>可配置温度参数</li>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">📊</span> 数据处理层</h3>
+                        <p><strong>Pandas + PyMuPDF</strong> — 结构化数据处理</p>
+                        <div class="list">
+                            <li>DataFrame 批量数据处理</li>
+                            <li>PDF 高质量转图片</li>
+                            <li>CSV/JSON 多格式导出</li>
+                            <li>日期时间标准化</li>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h4>项目文件结构</h4>
+                    </div>
+                    <table>
+                        <tr>
+                            <th>文件路径</th>
+                            <th>功能说明</th>
+                        </tr>
+                        <tr>
+                            <td>main.py</td>
+                            <td>独立 PDF 转图片服务（可单独使用）</td>
+                        </tr>
+                        <tr>
+                            <td>transaction_mapper.py</td>
+                            <td>CSV 字段映射与标准化服务</td>
+                        </tr>
+                        <tr>
+                            <td>app/main.py</td>
+                            <td>FastAPI 应用入口，中间件配置</td>
+                        </tr>
+                        <tr>
+                            <td>app/config.py</td>
+                            <td>环境变量与常量配置</td>
+                        </tr>
+                        <tr>
+                            <td>app/models.py</td>
+                            <td>Pydantic 请求/响应模型</td>
+                        </tr>
+                        <tr>
+                            <td>app/routers/ocr.py</td>
+                            <td>OCR 核心路由，后台任务编排</td>
+                        </tr>
+                        <tr>
+                            <td>app/services/ocr_agent.py</td>
+                            <td>LangGraph Agent 核心流程</td>
+                        </tr>
+                        <tr>
+                            <td>app/services/balance_corrector.py</td>
+                            <td>余额连续性校验与借贷修正</td>
+                        </tr>
+                        <tr>
+                            <td>app/services/file_handler.py</td>
+                            <td>文件下载与 PDF 转图片</td>
+                        </tr>
+                        <tr>
+                            <td>app/services/prompt_loader.py</td>
+                            <td>Dify 提示词动态加载与缓存</td>
+                        </tr>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 第三章：核心功能模块 -->
+            <section id="modules" class="section">
+                <div class="section-header">
+                    <h2>三、核心功能模块详解</h2>
+                    <p class="desc">四大核心模块协同实现智能流水识别</p>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">🔄</span> OCR Agent 工作流（LangGraph）</h3>
+                    <p>采用经典的 <strong>Fan-out/Fan-in 并行模式</strong>，两个 LLM 节点同时调用，充分利用模型推理时间重叠：</p>
+                    
+                    <div class="code-block">
+                        <pre>
+<span class="comment"># LangGraph 工作流结构</span>
+<span class="keyword">START</span>
+  ├── <span class="function">LLM 1: extract_transactions</span>  →  <span class="string">从图片提取交易流水 Markdown 表格</span>
+  └── <span class="function">LLM 2: extract_metadata</span>      →  <span class="string">从表头区域提取客户元数据 JSON</span>
+         ↓
+      <span class="function">merge_results</span>                →  <span class="string">合并流水与元数据为最终 JSON</span>
+         ↓
+       <span class="keyword">END</span></pre>
+                    </div>
+
+                    <div class="icon-list">
+                        <div class="icon-item"><span class="icon">✓</span> 支持多图批量处理</div>
+                        <div class="icon-item"><span class="icon">✓</span> 表头感知（非首块携带第一页参考）</div>
+                        <div class="icon-item"><span class="icon">✓</span> 元数据去重（分块场景下非首块跳过）</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">📑</span> PDF 分块并发处理</h3>
+                    <p>当 PDF 页数超过 <code>CHUNK_SIZE</code>（默认 8 页）时，系统自动：</p>
+                    <div class="list">
+                        <li><strong>智能分块</strong> — 按 CHUNK_SIZE 将页面分组，非首块前插入第一页作为表头参考</li>
+                        <li><strong>并发控制</strong> — <code>MAX_CHUNK_WORKERS</code>（默认 6）限制同时发往 LLM 的块数</li>
+                        <li><strong>指纹去重</strong> — 基于 <code>(trans_date, trans_time, trans_amt, account_balance)</code> 去除重叠行</li>
+                        <li><strong>元数据传播</strong> — 从 chunk-0 提取的 name/account_no/account_bank 填充其他块的空值</li>
+                    </div>
+                    
+                    <p class="sub-title">重试与二分策略</p>
+                    <div class="list">
+                        <li>每次失败自动重试 2 次（可配置）</li>
+                        <li>行数过少时触发系统性截断检测</li>
+                        <li>自动二分拆小后递归处理（最多 2 层）</li>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">⚖️</span> 余额连续性校验（Balance Corrector）</h3>
+                    <p>这是本项目最具技术深度的模块之一，通过<strong>财务逻辑一致性校验</strong>自动修正 OCR 错误：</p>
+                    
+                    <div class="grid-2">
+                        <div class="highlight-card">
+                            <h4>📈 升序校验</h4>
+                            <p>时间从早到晚：</p>
+                            <div class="code-block">
+                                <pre>bal[i] = bal[i-1] + delta[i]
+<span class="comment"># delta[i] = +amt（贷方） 或 -amt（借方）</span></pre>
+                            </div>
+                        </div>
+                        <div class="highlight-card">
+                            <h4>📉 降序校验</h4>
+                            <p>时间从晚到早：</p>
+                            <div class="code-block">
+                                <pre>bal[i] = bal[i-1] - delta[i-1]
+<span class="comment"># 前一行的借贷方向决定变化</span></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="sub-title">修正逻辑</p>
+                    <div class="list">
+                        <li>余额差在容忍值内（默认 0.01 元）→ 标记"正确"</li>
+                        <li>翻转借贷方向后吻合 → 自动修正并标记"已修正"</li>
+                        <li>无法修正 → 标记"存疑"供人工复核</li>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">🗺️</span> 字段映射与标准化</h3>
+                    <p><code>transaction_mapper.py</code> 实现了完整的字段标准化流程，支持 23 个标准字段：</p>
+                    
+                    <div class="table-container">
+                        <div class="table-header">
+                            <h4>目标字段清单</h4>
+                        </div>
+                        <table>
+                            <tr>
+                                <th>字段名</th>
+                                <th>说明</th>
+                            </tr>
+                            <tr><td>id, serial_id</td><td>序号标识</td></tr>
+                            <tr><td>name, account_id, account_no</td><td>账户信息</td></tr>
+                            <tr><td>account_bank</td><td>开户机构</td></tr>
+                            <tr><td>trans_date, trans_time</td><td>交易时间</td></tr>
+                            <tr><td>opponent_name</td><td>对方账户名</td></tr>
+                            <tr><td>debit_credit</td><td>借贷方向</td></tr>
+                            <tr><td>trans_amt, account_balance</td><td>金额与余额</td></tr>
+                            <tr><td>currency</td><td>币种</td></tr>
+                            <tr><td>trans_channel, trans_type</td><td>渠道与类型</td></tr>
+                            <tr><td>trans_use, abstract, remark</td><td>用途与备注</td></tr>
+                        </table>
+                    </div>
+
+                    <p class="sub-title">映射策略</p>
+                    <div class="list">
+                        <li>精确匹配字段名（如"对方户名"→"opponent_name"）</li>
+                        <li>模糊匹配包含关系（如含"余额"→"account_balance"）</li>
+                        <li>支持中英文别名（如"户名"→"name"，"支出"→"trans_amt"）</li>
+                        <li>日期时间格式自动标准化（YYYY-MM-DD、HH:MM:SS）</li>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第四章：API设计 -->
+            <section id="api" class="section">
+                <div class="section-header">
+                    <h2>四、API 接口设计</h2>
+                    <p class="desc">RESTful 风格 API，开箱即用的集成体验</p>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h4>核心 OCR 接口</h4>
+                    </div>
+                    <table>
+                        <tr>
+                            <th>接口</th>
+                            <th>方法</th>
+                            <th>说明</th>
+                        </tr>
+                        <tr>
+                            <td>/ocr</td>
+                            <td>POST</td>
+                            <td>异步受理，接收 URL 列表，立即返回 202，后台处理完成后回调</td>
+                        </tr>
+                        <tr>
+                            <td>/ocr/upload</td>
+                            <td>POST</td>
+                            <td>同步处理，本地上传文件测试用，直接返回 CSV 结果</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h4>字段映射服务</h4>
+                    </div>
+                    <table>
+                        <tr>
+                            <th>接口</th>
+                            <th>方法</th>
+                            <th>说明</th>
+                        </tr>
+                        <tr>
+                            <td>/map</td>
+                            <td>POST</td>
+                            <td>CSV 字段映射，返回标准化 CSV</td>
+                        </tr>
+                        <tr>
+                            <td>/map/json</td>
+                            <td>POST</td>
+                            <td>返回 JSON 格式预览（限 100 条）</td>
+                        </tr>
+                        <tr>
+                            <td>/map/info</td>
+                            <td>POST</td>
+                            <td>分析映射关系</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">📤</span> 上游请求示例</h3>
+                    <div class="code-block">
+                        <pre>{
+  <span class="string">"orderNO"</span>: <span class="string">"ORDER123456"</span>,           <span class="comment">// 订单号</span>
+  <span class="string">"accountNo"</span>: <span class="string">"621700***1234"</span>,      <span class="comment">// 账号</span>
+  <span class="string">"accountName"</span>: <span class="string">"张三"</span>,             <span class="comment">// 户名</span>
+  <span class="string">"remoteUrls"</span>: [                       <span class="comment">// 文件 URL 列表</span>
+    <span class="string">"https://example.com/statement.pdf"</span>,
+    <span class="string">"data:image/png;base64,iVBOR..."</span>
+  ],
+  <span class="string">"callbackUrl"</span>: <span class="string">"https://api.example.com/callback"</span>  <span class="comment">// 回调地址</span>
+}</pre>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">📥</span> 回调响应示例</h3>
+                    <div class="code-block">
+                        <pre>{
+  <span class="string">"orderNO"</span>: <span class="string">"ORDER123456"</span>,
+  <span class="string">"csvUrl"</span>: <span class="string">"/downloads/ORDER123456.csv"</span>,
+  <span class="string">"csvFile"</span>: <span class="string">"<base64_encoded_csv>"</span>,  <span class="comment">// Base64 编码的 CSV</span>
+  <span class="string">"custName"</span>: <span class="string">"张三"</span>,
+  <span class="string">"accountNo"</span>: <span class="string">"621700***1234"</span>,
+  <span class="string">"accountBank"</span>: <span class="string">"中国建设银行"</span>
+}</pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第五章：技术亮点 -->
+            <section id="highlights" class="section">
+                <div class="section-header">
+                    <h2>五、技术亮点与创新</h2>
+                    <p class="desc">企业级可靠性与高并发优化设计</p>
+                </div>
+
+                <div class="highlight-card">
+                    <h4>🏢 企业级可靠性设计</h4>
+                    <div class="grid-2">
+                        <div>
+                            <div class="list">
+                                <li><strong>全局异常处理</strong> — 统一捕获未处理异常，返回标准错误响应</li>
+                                <li><strong>超时控制</strong> — LLM 请求 1200 秒超时，HTTP 回调 60 秒</li>
+                                <li><strong>重试机制</strong> — 指数退避重试（1s→3s→5s），避免雪崩</li>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="list">
+                                <li><strong>回调保活</strong> — 连接复用关闭，防止 F5 断连</li>
+                                <li><strong>原始报文日志</strong> — RawLoggingMiddleware 记录上下游请求/响应</li>
+                                <li><strong>Base64 掩码</strong> — 自动截断 base64 data URL，避免日志暴增</li>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="highlight-card">
+                    <h4>⚡ 高并发优化</h4>
+                    <div class="grid-2">
+                        <div>
+                            <div class="list">
+                                <li><strong>异步架构</strong> — 全程 async/await，无阻塞 IO</li>
+                                <li><strong>信号量控制</strong> — MAX_CHUNK_WORKERS 限制 LLM 并发压力</li>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="list">
+                                <li><strong>PDF 分块</strong> — 大文件自动拆分并发处理</li>
+                                <li><strong>多文件并发</strong> — PDF 与图片文件并行处理</li>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="highlight-card">
+                    <h4>🔒 数据质量保障</h4>
+                    <div class="grid-2">
+                        <div>
+                            <div class="list">
+                                <li><strong>余额连续性校验</strong> — 基于财务规则的自动纠错</li>
+                                <li><strong>行数阈值检测</strong> — 防止 API 截断导致数据丢失</li>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="list">
+                                <li><strong>指纹去重</strong> — 多 chunk 合并时消除重复行</li>
+                                <li><strong>日期时间校验</strong> — 格式 + 日历合法性双重校验</li>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="highlight-card">
+                    <h4>📊 可观测性</h4>
+                    <div class="list">
+                        <li><strong>结构化日志</strong> — 带时间戳的 DEBUG/INFO/WARNING/ERROR 分级日志</li>
+                        <li><strong>缓存状态监控</strong> — <code>cache_status()</code> API 暴露缓存健康状态</li>
+                        <li><strong>TTL 缓存</strong> — 提示词缓存 10 分钟，支持手动失效</li>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第六章：配置灵活性 -->
+            <section id="config" class="section">
+                <div class="section-header">
+                    <h2>六、配置灵活性</h2>
+                    <p class="desc">丰富的环境变量配置，支持企业级定制</p>
+                </div>
+
+                <div class="table-container">
+                    <div class="table-header">
+                        <h4>核心配置项</h4>
+                    </div>
+                    <table>
+                        <tr>
+                            <th>配置项</th>
+                            <th>说明</th>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="background: rgba(59, 130, 246, 0.1); font-weight: 600;">LLM 配置</td>
+                        </tr>
+                        <tr>
+                            <td>LLM_API_KEY, LLM_BASE_URL, LLM_MODEL</td>
+                            <td>阿里云百炼 API 凭证与模型选择</td>
+                        </tr>
+                        <tr>
+                            <td>LLM_ENABLE_THINKING, LLM_EXTRACT_TEMPERATURE</td>
+                            <td>思考模式开关与温度参数</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="background: rgba(16, 185, 129, 0.1); font-weight: 600;">并发控制</td>
+                        </tr>
+                        <tr>
+                            <td>MAX_WORKERS, CHUNK_SIZE, MAX_CHUNK_WORKERS</td>
+                            <td>并发数、分块大小、LLM 并发限制</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="background: rgba(168, 85, 247, 0.1); font-weight: 600;">PDF 处理</td>
+                        </tr>
+                        <tr>
+                            <td>PDF_ZOOM, PDF_QUALITY, PDF_MAX_WIDTH, IMAGE_FORMAT</td>
+                            <td>缩放倍数、图片质量、最大宽度、输出格式</td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="background: rgba(245, 158, 11, 0.1); font-weight: 600;">业务参数</td>
+                        </tr>
+                        <tr>
+                            <td>BALANCE_CORRECTION_TOLERANCE</td>
+                            <td>余额校验容忍值</td>
+                        </tr>
+                        <tr>
+                            <td>CALLBACK_URL, DIFY_BASE_URL</td>
+                            <td>上游回调地址、Dify 平台地址</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div class="quote">
+                    所有配置均通过 <code>.env</code> 文件管理，支持本地开发、测试环境、生产环境的差异化配置，无需修改代码即可切换部署环境。
+                </div>
+            </section>
+
+            <!-- 第七章：适用场景 -->
+            <section id="scenarios" class="section">
+                <div class="section-header">
+                    <h2>七、适用场景</h2>
+                    <p class="desc">广泛服务于金融领域的多种业务场景</p>
+                </div>
+
+                <div class="grid-3">
+                    <div class="card">
+                        <h3><span class="icon">🏦</span></h3>
+                        <p><strong>银行流水数字化</strong></p>
+                        <p>将纸质/PDF 流水快速转为结构化数据，替代人工录入</p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">💰</span></h3>
+                        <p><strong>财务审计自动化</strong></p>
+                        <p>批量处理企业银行流水，支持余额校验与异常检测</p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">📱</span></h3>
+                        <p><strong>智能记账系统</strong></p>
+                        <p>对接个人/企业财务软件，自动识别交易类型与对手方</p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">🔍</span></h3>
+                        <p><strong>反洗钱风控</strong></p>
+                        <p>快速提取和分析资金交易记录，追踪资金流向</p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">📋</span></h3>
+                        <p><strong>贷款审批支持</strong></p>
+                        <p>核验借款人银行流水，自动计算收入支出指标</p>
+                    </div>
+                    <div class="card">
+                        <h3><span class="icon">🏢</span></h3>
+                        <p><strong>企业 ERP 对接</strong></p>
+                        <p>标准化 API 输出，无缝对接各类企业管理系统</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 第八章：总结评价 -->
+            <section id="summary" class="section">
+                <div class="section-header">
+                    <h2>八、总结评价</h2>
+                    <p class="desc">工程化程度极高的 AI 应用项目</p>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">🏆</span> 综合评价</h3>
+                    <p><strong>TransactionOCR_2</strong> 是一个<strong>工程化程度极高</strong>的 AI 应用项目，体现了以下核心能力：</p>
+                    
+                    <div class="table-container">
+                        <table>
+                            <tr>
+                                <th>评估维度</th>
+                                <th>评价</th>
+                                <th>说明</th>
+                            </tr>
+                            <tr>
+                                <td>架构设计</td>
+                                <td><div class="rating"><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span></div></td>
+                                <td>LangGraph 工作流编排清晰，分层模块化良好</td>
+                            </tr>
+                            <tr>
+                                <td>并发处理</td>
+                                <td><div class="rating"><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span></div></td>
+                                <td>异步 IO + 信号量控制 + PDF 分块，兼顾效率与稳定性</td>
+                            </tr>
+                            <tr>
+                                <td>数据质量</td>
+                                <td><div class="rating"><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star empty">★</span></div></td>
+                                <td>余额校验、行数检测、去重机制形成多层防护网</td>
+                            </tr>
+                            <tr>
+                                <td>生产就绪</td>
+                                <td><div class="rating"><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span></div></td>
+                                <td>异常处理、重试机制、日志追踪、回调通知完备</td>
+                            </tr>
+                            <tr>
+                                <td>扩展性</td>
+                                <td><div class="rating"><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span><span class="star">★</span></div></td>
+                                <td>支持 Dify 动态提示词、本地兜底策略灵活切换</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="highlight-card">
+                    <h4>💡 项目特色</h4>
+                    <div class="list">
+                        <li><strong>Fan-out/Fan-in 并行模式</strong> — 充分利用 LLM 推理时间，提高吞吐量</li>
+                        <li><strong>余额连续性校验</strong> — 基于财务规则的智能纠错，保证数据准确性</li>
+                        <li><strong>Dify 动态提示词</strong> — 热更新 OCR 规则，无需重新部署</li>
+                        <li><strong>多层次容错</strong> — 重试 + 二分 + 降级，保障服务稳定性</li>
+                        <li><strong>完整可观测性</strong> — 结构化日志 + 缓存监控，快速定位问题</li>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3><span class="icon">🚀</span> 建议与展望</h3>
+                    <div class="list">
+                        <li><strong>支持更多银行格式</strong> — 持续扩充提示词模板，覆盖更多城商行、农商行</li>
+                        <li><strong>智能异常检测</strong> — 增加交易异常模式识别（如大额转入转出、夜间交易）</li>
+                        <li><strong>多语言支持</strong> — 扩展支持英文、日文等外币流水</li>
+                        <li><strong>实时流式处理</strong> — 支持 WebSocket 流式输出，实时展示识别进度</li>
+                        <li><strong>可视化配置后台</strong> — 提供 Web UI 配置提示词、调整参数，降低运维门槛</li>
+                    </div>
+                </div>
+
+                <div class="quote">
+                    该项目特别适合作为<strong>企业级 OCR 服务</strong>的基础架构，具备从 POC 到生产的完整工程能力。建议在生产环境中充分压测后再逐步放量。
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        function showSection(sectionId, element) {
+            // 隐藏所有区域
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            // 取消所有导航项的激活状态
+            document.querySelectorAll('.toc-item').forEach(n => n.classList.remove('active'));
+            
+            // 显示目标区域
+            document.getElementById(sectionId).classList.add('active');
+            // 激活对应导航项
+            element.classList.add('active');
+            
+            // 滚动到顶部
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 滚动监听，高亮当前导航项
+        window.addEventListener('scroll', () => {
+            const sections = document.querySelectorAll('.section');
+            const navItems = document.querySelectorAll('.toc-item');
+            
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.scrollY >= sectionTop - 200) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navItems.forEach(item => {
+                item.classList.remove('active');
+                if (item.getAttribute('onclick').includes(current)) {
+                    item.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

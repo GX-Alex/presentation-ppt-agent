@@ -1,0 +1,36 @@
+{
+  "name": "generalagent-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
+    "clsx": "2.1.1",
+    "dompurify": "^3.2.3",
+    "lucide-react": "0.469.0",
+    "next": "15.1.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "2.6.0",
+    "zustand": "5.0.3"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.2.0",
+    "@types/node": "22.10.5",
+    "@types/react": "19.0.6",
+    "@types/react-dom": "19.0.3",
+    "autoprefixer": "10.4.20",
+    "eslint": "9.17.0",
+    "eslint-config-next": "15.1.4",
+    "postcss": "8.4.49",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.7.3"
+  }
+}

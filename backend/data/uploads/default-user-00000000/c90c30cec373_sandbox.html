@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A股行情日报 - 2025年3月31日</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            color: #2d3436;
+            font-size: 14px;
+            line-height: 1.4;
+            padding-bottom: 80px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        /* Page */
+        .page {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            padding: 20px;
+            margin-bottom: 16px;
+            min-height: calc(100vh - 120px);
+        }
+
+        /* Header */
+        .page-header {
+            text-align: center;
+            padding-bottom: 14px;
+            margin-bottom: 14px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .page-header h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2d3436;
+            margin-bottom: 4px;
+        }
+
+        .page-header .date {
+            font-size: 0.8rem;
+            color: #636e72;
+        }
+
+        .page-badge {
+            display: inline-block;
+            background: #0066cc;
+            color: #fff;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            margin-top: 6px;
+        }
+
+        /* Section */
+        .section {
+            margin-bottom: 14px;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #2d3436;
+            margin-bottom: 10px;
+            padding-left: 8px;
+            border-left: 3px solid #0066cc;
+        }
+
+        /* Index Grid */
+        .indices-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        @media (max-width: 700px) {
+            .indices-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .index-card {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .index-name {
+            font-size: 0.7rem;
+            color: #636e72;
+            margin-bottom: 4px;
+        }
+
+        .index-point {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #2d3436;
+            margin-bottom: 4px;
+        }
+
+        .index-change {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .index-change.up {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .index-change.down {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+        }
+
+        @media (max-width: 700px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 400px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .stat-value.up { color: #28a745; }
+        .stat-value.down { color: #dc3545; }
+        .stat-value.neutral { color: #2d3436; }
+
+        .stat-label {
+            font-size: 0.65rem;
+            color: #636e72;
+        }
+
+        /* Sector Grid */
+        .sector-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .sector-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .sector-card {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .sector-card-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .sector-card-title.up { color: #28a745; }
+        .sector-card-title.down { color: #dc3545; }
+
+        .sector-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 5px;
+        }
+
+        .sector-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 8px;
+            background: #fff;
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
+
+        .sector-name {
+            color: #2d3436;
+        }
+
+        .sector-tag {
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 0.6rem;
+            font-weight: 600;
+        }
+
+        .sector-tag.up {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .sector-tag.down {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        /* Analysis Grid */
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        @media (max-width: 900px) {
+            .analysis-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .analysis-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .analysis-card {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .analysis-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .analysis-logo {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, #0066cc, #0052a3);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.55rem;
+            color: #fff;
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+
+        .analysis-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #2d3436;
+        }
+
+        .analysis-summary {
+            color: #0066cc;
+            font-size: 0.7rem;
+            margin-bottom: 6px;
+            padding: 4px 6px;
+            background: #e7f3ff;
+            border-radius: 4px;
+            border-left: 2px solid #0066cc;
+        }
+
+        .analysis-points {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .analysis-point {
+            color: #636e72;
+            font-size: 0.65rem;
+            padding: 2px 0;
+            padding-left: 10px;
+            position: relative;
+            line-height: 1.3;
+        }
+
+        .analysis-point::before {
+            content: "•";
+            color: #0066cc;
+            position: absolute;
+            left: 0;
+        }
+
+        /* Summary Grid */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        @media (max-width: 600px) {
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .summary-item {
+            text-align: center;
+            padding: 10px 6px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+
+        .summary-icon {
+            font-size: 1.2rem;
+            margin-bottom: 4px;
+        }
+
+        .summary-label {
+            font-size: 0.65rem;
+            color: #636e72;
+            margin-bottom: 3px;
+        }
+
+        .summary-value {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #2d3436;
+            line-height: 1.3;
+        }
+
+        /* Risk Warning */
+        .risk-warning {
+            text-align: center;
+            padding: 10px;
+            color: #999;
+            font-size: 0.65rem;
+            margin-top: 14px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 10px;
+            color: #999;
+            font-size: 0.65rem;
+        }
+
+        /* Page Navigation - Fixed Bottom */
+        .page-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .page-btn {
+            background: #0066cc;
+            color: #fff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .page-btn:hover {
+            background: #0052a3;
+        }
+
+        .page-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .page-dots {
+            display: flex;
+            gap: 8px;
+        }
+
+        .page-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ddd;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .page-dot.active {
+            background: #0066cc;
+            transform: scale(1.2);
+        }
+
+        .page-indicator {
+            font-size: 0.8rem;
+            color: #666;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        /* Hide pages */
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Page 1 -->
+        <div class="page active" id="page1">
+            <div class="page-header">
+                <h1>📊 A股行情日报</h1>
+                <p class="date">2025年3月31日（周一）收盘</p>
+                <span class="page-badge">第 1 页</span>
+            </div>
+
+            <!-- 大盘指数 -->
+            <div class="section">
+                <div class="section-title">大盘指数表现</div>
+                <div class="indices-grid">
+                    <div class="index-card">
+                        <div class="index-name">上证综指</div>
+                        <div class="index-point">3,335.75</div>
+                        <span class="index-change down">▼ -0.46%</span>
+                    </div>
+                    <div class="index-card">
+                        <div class="index-name">深证成指</div>
+                        <div class="index-point">10,504.33</div>
+                        <span class="index-change down">▼ -0.97%</span>
+                    </div>
+                    <div class="index-card">
+                        <div class="index-name">创业板指</div>
+                        <div class="index-point">2,103.70</div>
+                        <span class="index-change down">▼ -1.15%</span>
+                    </div>
+                    <div class="index-card">
+                        <div class="index-name">科创50</div>
+                        <div class="index-point">1,022.71</div>
+                        <span class="index-change down">▼ -0.66%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 市场情绪 -->
+            <div class="section">
+                <div class="section-title">市场情绪与资金面</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value up">1,287</div>
+                        <div class="stat-label">上涨个股</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value down">4,026</div>
+                        <div class="stat-label">下跌个股</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value neutral">12,216亿</div>
+                        <div class="stat-label">成交额</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value up">+1,026亿</div>
+                        <div class="stat-label">较上日增量</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value neutral">48</div>
+                        <div class="stat-label">涨停</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value neutral">65</div>
+                        <div class="stat-label">跌停</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 板块表现 -->
+            <div class="section">
+                <div class="section-title">板块冷热对比</div>
+                <div class="sector-grid">
+                    <div class="sector-card">
+                        <div class="sector-card-title up">🔥 涨幅居前</div>
+                        <div class="sector-list">
+                            <div class="sector-item">
+                                <span class="sector-name">发电机概念</span>
+                                <span class="sector-tag up">↑</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">ERP概念</span>
+                                <span class="sector-tag up">↑</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">贵金属</span>
+                                <span class="sector-tag up">↑</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">互联网服务</span>
+                                <span class="sector-tag up">↑</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">电力行业</span>
+                                <span class="sector-tag up">↑</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">银行</span>
+                                <span class="sector-tag up">↑</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sector-card">
+                        <div class="sector-card-title down">❄️ 跌幅居前</div>
+                        <div class="sector-list">
+                            <div class="sector-item">
+                                <span class="sector-name">BC电池</span>
+                                <span class="sector-tag down">↓</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">环氧丙烷</span>
+                                <span class="sector-tag down">↓</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">TOPCon电池</span>
+                                <span class="sector-tag down">↓</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">第四代半导体</span>
+                                <span class="sector-tag down">↓</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">光伏设备</span>
+                                <span class="sector-tag down">↓</span>
+                            </div>
+                            <div class="sector-item">
+                                <span class="sector-name">船舶制造</span>
+                                <span class="sector-tag down">↓</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Page 2 -->
+        <div class="page" id="page2">
+            <div class="page-header">
+                <h1>📊 A股行情日报</h1>
+                <p class="date">2025年3月31日（周一）收盘</p>
+                <span class="page-badge">第 2 页</span>
+            </div>
+
+            <!-- 机构观点 -->
+            <div class="section">
+                <div class="section-title">机构后市观点</div>
+                <div class="analysis-grid">
+                    <div class="analysis-card">
+                        <div class="analysis-header">
+                            <div class="analysis-logo">建投</div>
+                            <div class="analysis-title">中信建投</div>
+                        </div>
+                        <div class="analysis-summary">季节性回调尚未结束</div>
+                        <div class="analysis-points">
+                            <div class="analysis-point">市场趋弱是结构、流动性、季节效应共同引起</div>
+                            <div class="analysis-point">关注红利避险和一季报超预期方向</div>
+                            <div class="analysis-point">"决断时点"或在4月底到5月出现</div>
+                            <div class="analysis-point">配置：银行、汽车、家电、公用事业</div>
+                        </div>
+                    </div>
+
+                    <div class="analysis-card">
+                        <div class="analysis-header">
+                            <div class="analysis-logo">中信</div>
+                            <div class="analysis-title">中信证券</div>
+                        </div>
+                        <div class="analysis-summary">风格高低切换进行时</div>
+                        <div class="analysis-points">
+                            <div class="analysis-point">前期热点退潮，业绩成关键</div>
+                            <div class="analysis-point">关注业绩超预期主题</div>
+                            <div class="analysis-point">化工原料涨价主题有机会</div>
+                            <div class="analysis-point">中美博弈主题持续发酵</div>
+                        </div>
+                    </div>
+
+                    <div class="analysis-card">
+                        <div class="analysis-header">
+                            <div class="analysis-logo">国泰</div>
+                            <div class="analysis-title">国泰君安</div>
+                        </div>
+                        <div class="analysis-summary">转型牛进入等待期</div>
+                        <div class="analysis-points">
+                            <div class="analysis-point">无风险利率下降推动资金入市</div>
+                            <div class="analysis-point">四月海外关税疑云密集</div>
+                            <div class="analysis-point">财报季业绩检验在即</div>
+                            <div class="analysis-point">策略：守正为主，重视业绩</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 投资建议 -->
+            <div class="section">
+                <div class="section-title">💡 投资建议</div>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="summary-icon">⚖️</div>
+                        <div class="summary-label">仓位建议</div>
+                        <div class="summary-value">控制仓位<br>等待方向明朗</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-icon">🎯</div>
+                        <div class="summary-label">配置方向</div>
+                        <div class="summary-value">低估值红利<br>+ 业绩确定</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-icon">⚠️</div>
+                        <div class="summary-label">风险提示</div>
+                        <div class="summary-value">回避高位题材<br>注意止损</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-icon">🚀</div>
+                        <div class="summary-label">关注机会</div>
+                        <div class="summary-value">一季报超预期<br>方向布局</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="risk-warning">
+                ⚠️ 风险提示：以上内容仅供参考，不构成投资建议。投资有风险，入市需谨慎。
+            </div>
+
+            <div class="footer">
+                <p>报告生成时间：2025年3月31日收盘后 | 数据来源：财联社、Wind</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="page-nav">
+        <button class="page-btn" id="prevBtn" onclick="prevPage()" disabled>
+            ◀ 上一页
+        </button>
+        <div class="page-dots">
+            <div class="page-dot active" onclick="goToPage(0)"></div>
+            <div class="page-dot" onclick="goToPage(1)"></div>
+        </div>
+        <span class="page-indicator" id="pageIndicator">1 / 2</span>
+        <button class="page-btn" id="nextBtn" onclick="nextPage()">
+            下一页 ▶
+        </button>
+    </div>
+
+    <script>
+        let currentPage = 0;
+        const totalPages = 2;
+        const pages = document.querySelectorAll('.page');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const dots = document.querySelectorAll('.page-dot');
+        const pageIndicator = document.getElementById('pageIndicator');
+
+        function updatePage() {
+            // Update button states
+            prevBtn.disabled = currentPage === 0;
+            nextBtn.disabled = currentPage === totalPages - 1;
+
+            // Update dots
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentPage);
+            });
+
+            // Update page indicator
+            pageIndicator.textContent = `${currentPage + 1} / ${totalPages}`;
+
+            // Show/hide pages
+            pages.forEach((page, index) => {
+                page.classList.toggle('active', index === currentPage);
+            });
+
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                updatePage();
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                updatePage();
+            }
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            updatePage();
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextPage();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevPage();
+            }
+        });
+
+        // Touch swipe support
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', function(e) {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        document.addEventListener('touchend', function(e) {
+            touchEndX = e.changedTouches[0].screenX;
+            handleSwipe();
+        }, { passive: true });
+
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            const diff = touchStartX - touchEndX;
+
+            if (Math.abs(diff) > swipeThreshold) {
+                if (diff > 0) {
+                    nextPage();
+                } else {
+                    prevPage();
+                }
+            }
+        }
+
+        // Initialize
+        updatePage();
+    </script>
+</body>
+</html>

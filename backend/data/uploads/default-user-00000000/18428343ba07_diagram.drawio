@@ -1,0 +1,207 @@
+<mxfile><diagram id="bank-ocr-arch-elegant" name="银行流水OCR智能体系统架构">
+  <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="950" math="0" shadow="0">
+    <root>
+      <mxCell id="0"/>
+      <mxCell id="1" parent="0"/>
+      
+      <!-- 背景 -->
+      <mxCell id="bg" value="" style="bg=#fafbfc;rectangularStyle=0;" vertex="1" parent="1">
+        <mxGeometry x="0" y="0" width="1400" height="950" as="geometry"/>
+      </mxCell>
+      
+      <!-- 顶部装饰线 -->
+      <mxCell id="top-line" value="" style="shape=rect;fillColor=#667eea;strokeColor=none;rectangularStyle=0;" vertex="1" parent="1">
+        <mxGeometry x="0" y="0" width="1400" height="6" as="geometry"/>
+      </mxCell>
+      
+      <!-- 标题区域 -->
+      <mxCell id="title-container" value="" style="shape=rect;fillColor=linear;fillColor2=#f1f5f9;strokeColor=#e2e8f0;rectangularStyle=0;gradientColor=#667eea;gradientDirection=north;" vertex="1" parent="1">
+        <mxGeometry x="400" y="25" width="600" height="70" as="geometry"/>
+      </mxCell>
+      <mxCell id="title" value="银行流水OCR智能体服务" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#1e293b;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+        <mxGeometry x="450" y="32" width="500" height="40" as="geometry"/>
+      </mxCell>
+      <mxCell id="subtitle" value="System Architecture · 系统架构图" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=13;fontColor=#64748b;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+        <mxGeometry x="500" y="68" width="400" height="25" as="geometry"/>
+      </mxCell>
+      
+      <!-- 五层架构 - 使用卡片式设计 -->
+      
+      <!-- 接入层 -->
+      <mxCell id="l1-bg" value="" style="shape=rect;fillColor=#ffffff;strokeColor=#3b82f6;strokeWidth=2;rectangularStyle=0;shadow=1;shadowColor=#3b82f6;shadowAlpha=0.15;" vertex="1" parent="1">
+        <mxGeometry x="40" y="120" width="200" height="140" as="geometry"/>
+      </mxCell>
+      <mxCell id="layer1-header" value="接入层" style="shape=rect;fillColor=#3b82f6;strokeColor=none;rectangularStyle=0;fontSize=14;fontStyle=1;fontColor=#ffffff;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="40" y="120" width="200" height="38" as="geometry"/>
+      </mxCell>
+      <mxCell id="api1" value="POST /ocr" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontStyle=1;fontColor=#1e40af;fontFamily=Consolas;spacingLeft=15;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="55" y="168" width="170" height="24" as="geometry"/>
+      </mxCell>
+      <mxCell id="api1-desc" value="生产接口 · 远程URL + 回调" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#64748b;fontFamily=Microsoft YaHei;spacingLeft=15;verticalAlign=top;" vertex="1" parent="1">
+        <mxGeometry x="55" y="192" width="170" height="22" as="geometry"/>
+      </mxCell>
+      <mxCell id="api2" value="POST /ocr/upload" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontStyle=1;fontColor=#1e40af;fontFamily=Consolas;spacingLeft=15;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="55" y="220" width="170" height="24" as="geometry"/>
+      </mxCell>
+      <mxCell id="api2-desc" value="测试接口 · 文件上传" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=10;fontColor=#64748b;fontFamily=Microsoft YaHei;spacingLeft=15;verticalAlign=top;" vertex="1" parent="1">
+        <mxGeometry x="55" y="244" width="170" height="22" as="geometry"/>
+      </mxCell>
+      
+      <!-- 智能体层 -->
+      <mxCell id="l2-bg" value="" style="shape=rect;fillColor=#ffffff;strokeColor=#8b5cf6;strokeWidth=2;rectangularStyle=0;shadow=1;shadowColor=#8b5cf6;shadowAlpha=0.15;" vertex="1" parent="1">
+        <mxGeometry x="260" y="120" width="300" height="140" as="geometry"/>
+      </mxCell>
+      <mxCell id="layer2-header" value="智能体层" style="shape=rect;fillColor=#8b5cf6;strokeColor=none;rectangularStyle=0;fontSize=14;fontStyle=1;fontColor=#ffffff;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="260" y="120" width="300" height="38" as="geometry"/>
+      </mxCell>
+      <mxCell id="langgraph" value="LangGraph Fan-Out 并行工作流" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;fontColor=#5b21b6;fontFamily=Microsoft YaHei;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="275" y="162" width="270" height="28" as="geometry"/>
+      </mxCell>
+      <mxCell id="extract1" value="extract_transactions&#xa;交易记录 → Markdown" style="shape=roundRect;fillColor=#fef3c7;strokeColor=#f59e0b;strokeWidth=1.5;fontSize=10;fontColor=#92400e;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.08;" vertex="1" parent="1">
+        <mxGeometry x="275" y="195" width="120" height="50" as="geometry"/>
+      </mxCell>
+      <mxCell id="extract2" value="extract_metadata&#xa;账户元数据 → JSON" style="shape=roundRect;fillColor=#fef3c7;strokeColor=#f59e0b;strokeWidth=1.5;fontSize=10;fontColor=#92400e;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.08;" vertex="1" parent="1">
+        <mxGeometry x="405" y="195" width="145" height="50" as="geometry"/>
+      </mxCell>
+      <mxCell id="merge" value="merge_results" style="shape=roundRect;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=1;fontSize=10;fontColor=#1e40af;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.08;" vertex="1" parent="1">
+        <mxGeometry x="310" y="238" width="130" height="28" as="geometry"/>
+      </mxCell>
+      
+      <!-- 并行标签 -->
+      <mxCell id="para-badge" value="并行" style="shape=ellipse;fillColor=#f59e0b;strokeColor=none;fontSize=10;fontStyle=1;fontColor=#ffffff;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="395" y="158" width="40" height="22" as="geometry"/>
+      </mxCell>
+      
+      <!-- 文件处理层 -->
+      <mxCell id="l3-bg" value="" style="shape=rect;fillColor=#ffffff;strokeColor=#10b981;strokeWidth=2;rectangularStyle=0;shadow=1;shadowColor=#10b981;shadowAlpha=0.15;" vertex="1" parent="1">
+        <mxGeometry x="580" y="120" width="240" height="140" as="geometry"/>
+      </mxCell>
+      <mxCell id="layer3-header" value="文件处理层" style="shape=rect;fillColor=#10b981;strokeColor=none;rectangularStyle=0;fontSize=14;fontStyle=1;fontColor=#ffffff;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="580" y="120" width="240" height="38" as="geometry"/>
+      </mxCell>
+      <mxCell id="file-handler" value="file_handler.py" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=13;fontStyle=1;fontColor=#065f46;fontFamily=Microsoft YaHei;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="600" y="162" width="200" height="28" as="geometry"/>
+      </mxCell>
+      <mxCell id="format-support" value="支持格式: JPEG · PNG · GIF · WebP · PDF" style="shape=roundRect;fillColor=#ecfdf5;strokeColor=#a7f3d0;strokeWidth=1;fontSize=10;fontColor=#047857;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.06;" vertex="1" parent="1">
+        <mxGeometry x="595" y="195" width="210" height="26" as="geometry"/>
+      </mxCell>
+      <mxCell id="pdf-process" value="PDF → PyMuPDF栅格化 → Pillow压缩" style="shape=roundRect;fillColor=#ffffff;strokeColor=#a7f3d0;strokeWidth=1;fontSize=10;fontColor=#065f46;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.06;" vertex="1" parent="1">
+        <mxGeometry x="595" y="228" width="210" height="26" as="geometry"/>
+      </mxCell>
+      
+      <!-- 数据处理层 -->
+      <mxCell id="l4-bg" value="" style="shape=rect;fillColor=#ffffff;strokeColor=#f43f5e;strokeWidth=2;rectangularStyle=0;shadow=1;shadowColor=#f43f5e;shadowAlpha=0.15;" vertex="1" parent="1">
+        <mxGeometry x="840" y="120" width="280" height="140" as="geometry"/>
+      </mxCell>
+      <mxCell id="layer4-header" value="数据处理层" style="shape=rect;fillColor=#f43f5e;strokeColor=none;rectangularStyle=0;fontSize=14;fontStyle=1;fontColor=#ffffff;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="840" y="120" width="280" height="38" as="geometry"/>
+      </mxCell>
+      <mxCell id="data-proc" value="data_processor.py" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=12;fontStyle=1;fontColor=#be123c;fontFamily=Microsoft YaHei;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="855" y="162" width="130" height="26" as="geometry"/>
+      </mxCell>
+      <mxCell id="mapper" value="transaction_mapper.py&#xa;200+ 字段 → 24 标准字段" style="shape=roundRect;fillColor=#fff1f2;strokeColor=#fecdd3;strokeWidth=1;fontSize=10;fontColor=#be123c;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.08;" vertex="1" parent="1">
+        <mxGeometry x="980" y="160" width="130" height="40" as="geometry"/>
+      </mxCell>
+      <mxCell id="clean-pipe" value="数据清洗管道: 日期标准化 · 金额处理&#xa;数值校验 · 脏数据过滤" style="shape=roundRect;fillColor=#ffffff;strokeColor=#fecdd3;strokeWidth=1;fontSize=10;fontColor=#9f1239;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.06;" vertex="1" parent="1">
+        <mxGeometry x="855" y="205" width="255" height="45" as="geometry"/>
+      </mxCell>
+      
+      <!-- 余额校验层 -->
+      <mxCell id="l5-bg" value="" style="shape=rect;fillColor=#ffffff;strokeColor=#06b6d4;strokeWidth=2;rectangularStyle=0;shadow=1;shadowColor=#06b6d4;shadowAlpha=0.15;" vertex="1" parent="1">
+        <mxGeometry x="1140" y="120" width="220" height="140" as="geometry"/>
+      </mxCell>
+      <mxCell id="layer5-header" value="余额校验层" style="shape=rect;fillColor=#06b6d4;strokeColor=none;rectangularStyle=0;fontSize=14;fontStyle=1;fontColor=#ffffff;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="1140" y="120" width="220" height="38" as="geometry"/>
+      </mxCell>
+      <mxCell id="balance-corr" value="balance_corrector.py" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=13;fontStyle=1;fontColor=#0e7490;fontFamily=Microsoft YaHei;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="1155" y="162" width="190" height="28" as="geometry"/>
+      </mxCell>
+      <mxCell id="balance-func" value="apply_balance_correction()&#xa;余额连续性校验 · 自动修正借贷方向&#xa;存疑记录标记 · asyncio.to_thread" style="shape=roundRect;fillColor=#ecfeff;strokeColor=#a5f3fc;strokeWidth=1;fontSize=10;fontColor=#155e75;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.08;" vertex="1" parent="1">
+        <mxGeometry x="1155" y="195" width="190" height="58" as="geometry"/>
+      </mxCell>
+      
+      <!-- 连接箭头 -->
+      <mxCell id="arr1" value="" style="shape=ext;double=1;fillColor=none;strokeColor=#94a3b8;strokeWidth=2;direction=east;outputFormat=svg;" vertex="1" parent="1">
+        <mxGeometry x="245" y="180" width="30" height="20" as="geometry"/>
+      </mxCell>
+      <mxCell id="arr2" value="" style="shape=ext;double=1;fillColor=none;strokeColor=#94a3b8;strokeWidth=2;direction=east;outputFormat=svg;" vertex="1" parent="1">
+        <mxGeometry x="565" y="180" width="30" height="20" as="geometry"/>
+      </mxCell>
+      <mxCell id="arr3" value="" style="shape=ext;double=1;fillColor=none;strokeColor=#94a3b8;strokeWidth=2;direction=east;outputFormat=svg;" vertex="1" parent="1">
+        <mxGeometry x="825" y="180" width="30" height="20" as="geometry"/>
+      </mxCell>
+      <mxCell id="arr4" value="" style="shape=ext;double=1;fillColor=none;strokeColor=#94a3b8;strokeWidth=2;direction=east;outputFormat=svg;" vertex="1" parent="1">
+        <mxGeometry x="1125" y="180" width="30" height="20" as="geometry"/>
+      </mxCell>
+      
+      <!-- 外部依赖区域 -->
+      <mxCell id="ext-section" value="" style="shape=rect;fillColor=#f8fafc;strokeColor=#e2e8f0;strokeWidth=1;rectangularStyle=0;dashed=1;" vertex="1" parent="1">
+        <mxGeometry x="260" y="290" width="440" height="70" as="geometry"/>
+      </mxCell>
+      <mxCell id="ext-label" value="外部依赖" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontStyle=2;fontColor=#64748b;fontFamily=Microsoft YaHei;spacingLeft=10;" vertex="1" parent="1">
+        <mxGeometry x="275" y="300" width="100" height="22" as="geometry"/>
+      </mxCell>
+      <mxCell id="qwen-vl" value="Qwen-VL 多模态大模型" style="shape=roundRect;fillColor=#ffffff;strokeColor=#667eea;strokeWidth=1.5;fontSize=12;fontColor=#4338ca;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.1;" vertex="1" parent="1">
+        <mxGeometry x="290" y="325" width="190" height="30" as="geometry"/>
+      </mxCell>
+      <mxCell id="dify" value="Dify 提示词管理平台" style="shape=roundRect;fillColor=#ffffff;strokeColor=#667eea;strokeWidth=1.5;fontSize=12;fontColor=#4338ca;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.1;" vertex="1" parent="1">
+        <mxGeometry x="500" y="325" width="185" height="30" as="geometry"/>
+      </mxCell>
+      <mxCell id="aliyun" value="阿里云百炼" style="shape=roundRect;fillColor=#fff1f2;strokeColor=#f43f5e;strokeWidth=1;fontSize=10;fontColor=#be123c;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;rectRadius=0.08;" vertex="1" parent="1">
+        <mxGeometry x="290" y="300" width="80" height="22" as="geometry"/>
+      </mxCell>
+      
+      <!-- 输出区域 -->
+      <mxCell id="output-section" value="" style="shape=rect;fillColor=#f0fdf4;strokeColor=#22c55e;strokeWidth=2;rectangularStyle=0;shadow=1;shadowColor=#22c55e;shadowAlpha=0.2;" vertex="1" parent="1">
+        <mxGeometry x="40" y="290" width="200" height="70" as="geometry"/>
+      </mxCell>
+      <mxCell id="output-header" value="输出" style="shape=rect;fillColor=#22c55e;strokeColor=none;rectangularStyle=0;fontSize=12;fontStyle=1;fontColor=#ffffff;fontFamily=Microsoft YaHei;align=center;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="40" y="290" width="200" height="28" as="geometry"/>
+      </mxCell>
+      <mxCell id="csv-output" value="标准 CSV 格式 · 24个标准字段&#xa;回调通知业务系统" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontColor=#166534;fontFamily=Microsoft YaHei;verticalAlign=middle;" vertex="1" parent="1">
+        <mxGeometry x="50" y="322" width="180" height="35" as="geometry"/>
+      </mxCell>
+      
+      <!-- 输出连接线 -->
+      <mxCell id="out-conn" value="" style="shape=ext;double=1;fillColor=none;strokeColor=#22c55e;strokeWidth=2;direction=south;outputFormat=svg;" vertex="1" parent="1">
+        <mxGeometry x="1125" y="265" width="20" height="40" as="geometry"/>
+      </mxCell>
+      <mxCell id="out-conn2" value="" style="endArrow=classic;html=1;strokeColor=#22c55e;strokeWidth=2;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="l5-bg" target="csv-output">
+        <mxGeometry relative="1" as="geometry">
+          <Array as="points">
+            <mxPoint x="1000" y="300"/>
+            <mxPoint x="140" y="300"/>
+            <mxPoint x="140" y="325"/>
+          </Array>
+        </mxGeometry>
+      </mxCell>
+      
+      <!-- 图例 -->
+      <mxCell id="legend" value="" style="shape=rect;fillColor=#ffffff;strokeColor=#e2e8f0;strokeWidth=1;rectangularStyle=0;shadow=1;" vertex="1" parent="1">
+        <mxGeometry x="720" y="290" width="200" height="85" as="geometry"/>
+      </mxCell>
+      <mxCell id="legend-title" value="图例" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=12;fontStyle=2;fontColor=#334155;fontFamily=Microsoft YaHei;spacingLeft=12;" vertex="1" parent="1">
+        <mxGeometry x="730" y="300" width="60" height="20" as="geometry"/>
+      </mxCell>
+      <mxCell id="leg1" value="" style="shape=rect;fillColor=#fef3c7;strokeColor=#f59e0b;strokeWidth=1;rectangularStyle=0;" vertex="1" parent="1">
+        <mxGeometry x="735" y="328" width="22" height="16" as="geometry"/>
+      </mxCell>
+      <mxCell id="leg1-text" value="LLM 任务节点" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#475569;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+        <mxGeometry x="762" y="326" width="100" height="20" as="geometry"/>
+      </mxCell>
+      <mxCell id="leg2" value="" style="shape=rect;fillColor=#dbeafe;strokeColor=#3b82f6;strokeWidth=1;rectangularStyle=0;" vertex="1" parent="1">
+        <mxGeometry x="735" y="352" width="22" height="16" as="geometry"/>
+      </mxCell>
+      <mxCell id="leg2-text" value="结果合并" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#475569;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+        <mxGeometry x="762" y="350" width="80" height="20" as="geometry"/>
+      </mxCell>
+      <mxCell id="leg3" value="" style="shape=rect;fillColor=#ecfeff;strokeColor=#06b6d4;strokeWidth=1;rectangularStyle=0;" vertex="1" parent="1">
+        <mxGeometry x="735" y="376" width="22" height="16" as="geometry"/>
+      </mxCell>
+      <mxCell id="leg3-text" value="校验处理模块" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#475569;fontFamily=Microsoft YaHei;" vertex="1" parent="1">
+        <mxGeometry x="762" y="374" width="100" height="20" as="geometry"/>
+      </mxCell>
+      
+    </root>
+  </mxGraphModel>
+</diagram></mxfile>

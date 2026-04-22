@@ -1,0 +1,2994 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI智能客服系统改造方案</title>
+    <style>
+        /* ── Web Deck Shell 全局样式 ── */
+        :root {
+            --deck-bg: #0f172a;
+            --deck-text: #f1f5f9;
+            --deck-accent: #3b82f6;
+            --deck-font-heading: Inter, system-ui, sans-serif;
+            --deck-font-body: Inter, system-ui, sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--deck-font-body);
+            background: var(--deck-bg);
+            color: var(--deck-text);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ── 整体布局 ── */
+        .deck-shell {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ── 左侧目录 ── */
+        .deck-sidebar {
+            width: 240px;
+            background: rgba(0,0,0,0.3);
+            border-right: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 20px 0;
+        }
+
+        .deck-sidebar-title {
+            padding: 0 20px 16px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--deck-accent);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .deck-toc-item {
+            padding: 8px 20px;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.5);
+            cursor: pointer;
+            transition: all 0.2s;
+            list-style: none;
+            border-left: 2px solid transparent;
+        }
+
+        .deck-toc-item:hover {
+            color: rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.03);
+        }
+
+        .deck-toc-item.active {
+            color: var(--deck-accent);
+            border-left-color: var(--deck-accent);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        /* ── 主内容区 ── */
+        .deck-main {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .deck-viewport {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            scroll-snap-type: y mandatory;
+        }
+
+        .deck-page {
+            min-height: 100vh;
+            scroll-snap-align: start;
+            position: relative;
+        }
+
+        /* ── 底部控制栏 ── */
+        .deck-controls {
+            position: fixed;
+            bottom: 0;
+            left: 240px;
+            right: 0;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,255,255,0.06);
+            z-index: 100;
+        }
+
+        .deck-page-indicator {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.5);
+            display: block;
+        }
+
+        .deck-progress {
+            position: fixed;
+            top: 0;
+            left: 240px;
+            right: 0;
+            height: 3px;
+            background: rgba(255,255,255,0.06);
+            z-index: 100;
+            display: block;
+        }
+
+        .deck-progress-bar {
+            height: 100%;
+            background: var(--deck-accent);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .deck-nav-btn {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.7);
+            padding: 6px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .deck-nav-btn:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+
+        .deck-nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="deck-shell">
+        <!-- 左侧目录 -->
+        <nav class="deck-sidebar">
+            <div class="deck-sidebar-title">AI智能客服系统改造方案</div>
+            <ul id="tocList">
+                <li data-page-index="0" class="deck-toc-item" onclick="goToPage(0)">AI智能客服系统改造方案</li>
+<li data-page-index="1" class="deck-toc-item" onclick="goToPage(1)">目录</li>
+<li data-page-index="2" class="deck-toc-item" onclick="goToPage(2)">执行摘要</li>
+<li data-page-index="3" class="deck-toc-item" onclick="goToPage(3)">现状分析与挑战</li>
+<li data-page-index="4" class="deck-toc-item" onclick="goToPage(4)">AI原生客服愿景</li>
+<li data-page-index="5" class="deck-toc-item" onclick="goToPage(5)">架构对比</li>
+<li data-page-index="6" class="deck-toc-item" onclick="goToPage(6)">目标系统架构</li>
+<li data-page-index="7" class="deck-toc-item" onclick="goToPage(7)">核心能力设计</li>
+<li data-page-index="8" class="deck-toc-item" onclick="goToPage(8)">实施路线图</li>
+<li data-page-index="9" class="deck-toc-item" onclick="goToPage(9)">价值评估</li>
+<li data-page-index="10" class="deck-toc-item" onclick="goToPage(10)">风险与对策</li>
+<li data-page-index="11" class="deck-toc-item" onclick="goToPage(11)">总结与建议</li>
+<li data-page-index="12" class="deck-toc-item" onclick="goToPage(12)">附录：技术规格</li>
+            </ul>
+        </nav>
+
+        <!-- 主内容区 -->
+        <main class="deck-main">
+            <div class="deck-progress">
+                <div class="deck-progress-bar" id="progressBar"></div>
+            </div>
+
+            <div class="deck-viewport" id="viewport">
+                <section data-page-id="p01" class="deck-page">
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-light: #60a5fa;
+      --bg-dark: #0f172a;
+      --text-light: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+    .deck-page {
+      min-height: 100vh;
+      background: var(--bg-dark);
+      color: var(--text-light);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 4rem 2rem;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      position: relative;
+      overflow: hidden;
+    }
+    .deck-page::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .deck-page::after {
+      content: "";
+      position: absolute;
+      bottom: -30%;
+      left: -10%;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .cover-content {
+      text-align: center;
+      max-width: 800px;
+      z-index: 1;
+    }
+    .cover-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      padding: 0.5rem 1.5rem;
+      border-radius: 2rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+    }
+    .cover-title {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(135deg, var(--text-light) 0%, var(--primary-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .cover-divider {
+      width: 80px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+      border-radius: 2px;
+      margin: 0 auto 2rem;
+    }
+    .cover-subtitle {
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      color: var(--text-muted);
+      line-height: 1.8;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .cover-meta {
+      margin-top: 3rem;
+      display: flex;
+      gap: 2rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+    .meta-icon {
+      width: 20px;
+      height: 20px;
+      fill: var(--primary);
+    }
+    .floating-shape {
+      position: absolute;
+      border: 2px solid rgba(59, 130, 246, 0.2);
+      border-radius: 50%;
+      animation: float 6s ease-in-out infinite;
+    }
+    .shape-1 {
+      top: 15%;
+      left: 10%;
+      width: 60px;
+      height: 60px;
+      animation-delay: 0s;
+    }
+    .shape-2 {
+      bottom: 20%;
+      right: 15%;
+      width: 40px;
+      height: 40px;
+      animation-delay: 2s;
+    }
+    .shape-3 {
+      top: 30%;
+      right: 20%;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      animation-delay: 4s;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-20px) rotate(10deg); }
+    }
+  </style>
+  
+  <div class="floating-shape shape-1"></div>
+  <div class="floating-shape shape-2"></div>
+  <div class="floating-shape shape-3"></div>
+  
+  <div class="cover-content">
+    <div class="cover-badge">战略升级方案</div>
+    <h1 class="cover-title">AI智能客服系统改造方案</h1>
+    <div class="cover-divider"></div>
+    <p class="cover-subtitle">
+      通过AI原生架构实现客服能力代际升级<br>
+      提升服务效率与用户体验
+    </p>
+    <div class="cover-meta">
+      <div class="meta-item">
+        <svg class="meta-icon" viewBox="0 0 24 24">
+          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l4.59-4.58L18 11l-6 6z"/>
+        </svg>
+        <span>智能升级</span>
+      </div>
+      <div class="meta-item">
+        <svg class="meta-icon" viewBox="0 0 24 24">
+          <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+        </svg>
+        <span>2024年度</span>
+      </div>
+      <div class="meta-item">
+        <svg class="meta-icon" viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+        <span>数字化转型</span>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-page-id="p02" class="deck-page">
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --bg: #0f172a;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+    
+    .deck-page {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 4rem 2rem;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    
+    .toc-wrapper {
+      max-width: 900px;
+      width: 100%;
+    }
+    
+    .toc-header {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+    
+    .toc-label {
+      display: inline-block;
+      font-size: 0.875rem;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+    
+    .toc-title {
+      font-size: 3.5rem;
+      font-weight: 700;
+      margin: 0;
+      background: linear-gradient(135deg, var(--text) 0%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+    }
+    
+    .toc-item {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 12px;
+      padding: 2rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1.5rem;
+      transition: all 0.3s ease;
+      cursor: default;
+    }
+    
+    .toc-item:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--primary);
+      transform: translateY(-2px);
+    }
+    
+    .toc-number {
+      width: 48px;
+      height: 48px;
+      background: var(--primary);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+    
+    .toc-content {
+      flex: 1;
+    }
+    
+    .toc-item-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+      color: var(--text);
+    }
+    
+    .toc-item-desc {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.5;
+    }
+    
+    @media (max-width: 640px) {
+      .toc-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .toc-title {
+        font-size: 2.5rem;
+      }
+    }
+  </style>
+  
+  <div class="toc-wrapper">
+    <header class="toc-header">
+      <span class="toc-label">Contents</span>
+      <h1 class="toc-title">目录</h1>
+    </header>
+    
+    <nav class="toc-grid">
+      <article class="toc-item">
+        <div class="toc-number">01</div>
+        <div class="toc-content">
+          <h2 class="toc-item-title">概述与背景</h2>
+          <p class="toc-item-desc">项目背景介绍</p>
+        </div>
+      </article>
+      
+      <article class="toc-item">
+        <div class="toc-number">02</div>
+        <div class="toc-content">
+          <h2 class="toc-item-title">核心内容</h2>
+          <p class="toc-item-desc">主要观点阐述</p>
+        </div>
+      </article>
+      
+      <article class="toc-item">
+        <div class="toc-number">03</div>
+        <div class="toc-content">
+          <h2 class="toc-item-title">实践案例</h2>
+          <p class="toc-item-desc">实际应用展示</p>
+        </div>
+      </article>
+      
+      <article class="toc-item">
+        <div class="toc-number">04</div>
+        <div class="toc-content">
+          <h2 class="toc-item-title">总结展望</h2>
+          <p class="toc-item-desc">结论与未来方向</p>
+        </div>
+      </article>
+    </nav>
+  </div>
+</section>
+<section data-page-id="p03" class="deck-page" style="background-color: #0f172a; color: #f1f5f9; min-height: 100vh; padding: 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <div style="max-width: 1400px; margin: 0 auto;">
+    <!-- Title Section -->
+    <div style="text-align: center; margin-bottom: 50px;">
+      <h2 style="font-size: 2.5rem; font-weight: 700; color: #f1f5f9; margin: 0 0 16px 0; letter-spacing: -0.02em;">
+        执行摘要
+      </h2>
+      <div style="width: 60px; height: 4px; background: #3b82f6; margin: 0 auto; border-radius: 2px;"></div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 60px; align-items: center;">
+      <!-- Left: Narrative Lane -->
+      <div style="padding: 40px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); border-radius: 16px; border: 1px solid rgba(59, 130, 246, 0.2);">
+        <p style="font-size: 1.25rem; line-height: 1.8; margin: 0 0 32px 0; color: #f1f5f9;">
+          传统客服深陷效率瓶颈，<span style="color: #3b82f6; font-weight: 600;">AI原生客服</span>实现成本降低60%、响应速度提升3倍。
+        </p>
+        
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          <li style="display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.2);">
+            <span style="width: 32px; height: 32px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
+              <svg width="16" height="16" fill="#ffffff" viewBox="0 0 24 24">
+                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
+              </svg>
+            </span>
+            <span style="font-size: 1.1rem;">7×24即时响应</span>
+          </li>
+          <li style="display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.2);">
+            <span style="width: 32px; height: 32px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
+              <svg width="16" height="16" fill="#ffffff" viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+            </span>
+            <span style="font-size: 1.1rem;">智能处理80%常见问题</span>
+          </li>
+          <li style="display: flex; align-items: center; padding: 16px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.2);">
+            <span style="width: 32px; height: 32px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
+              <svg width="16" height="16" fill="#ffffff" viewBox="0 0 24 24">
+                <path d="M4 6h18V4H4c-1.1 0-2 .9-2 2v11H0v3h14v-3H4V6zm19 2h-6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V9c0-.55-.45-1-1-1zm-1 9h-4v-7h4v7z"/>
+              </svg>
+            </span>
+            <span style="font-size: 1.1rem;">多渠道统一服务</span>
+          </li>
+          <li style="display: flex; align-items: center; padding: 16px 0;">
+            <span style="width: 32px; height: 32px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;">
+              <svg width="16" height="16" fill="#ffffff" viewBox="0 0 24 24">
+                <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+              </svg>
+            </span>
+            <span style="font-size: 1.1rem;">快速部署自动优化</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Right: Chart Lane -->
+      <div id="metrics_summary" style="width: 100%; height: 400px;"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script>
+    const metricsChart = echarts.init(document.getElementById('metrics_summary'));
+    const option = {
+      backgroundColor: 'transparent',
+      title: {
+        text: '关键指标概览',
+        left: 'center',
+        top: 10,
+        textStyle: {
+          color: '#f1f5f9',
+          fontSize: 20,
+          fontWeight: 'bold'
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{b}: {c}%',
+        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+        borderColor: '#3b82f6',
+        textStyle: {
+          color: '#f1f5f9'
+        }
+      },
+      series: [
+        {
+          name: '成本降低',
+          type: 'gauge',
+          center: ['20%', '55%'],
+          radius: '65%',
+          startAngle: 200,
+          endAngle: -20,
+          min: 0,
+          max: 100,
+          splitNumber: 5,
+          itemStyle: {
+            color: '#3b82f6'
+          },
+          progress: {
+            show: true,
+            width: 18
+          },
+          pointer: {
+            show: true,
+            length: '60%',
+            width: 6
+          },
+          axisLine: {
+            lineStyle: {
+              width: 18,
+              color: [[1, 'rgba(148, 163, 184, 0.2)']]
+            }
+          },
+          axisTick: {
+            distance: -25,
+            splitNumber: 5,
+            lineStyle: {
+              width: 1,
+              color: '#94a3b8'
+            }
+          },
+          splitLine: {
+            distance: -30,
+            length: 12,
+            lineStyle: {
+              width: 2,
+              color: '#94a3b8'
+            }
+          },
+          axisLabel: {
+            distance: -15,
+            color: '#94a3b8',
+            fontSize: 11
+          },
+          anchor: {
+            show: true,
+            size: 8,
+            itemStyle: {
+              borderColor: '#3b82f6',
+              borderWidth: 2
+            }
+          },
+          detail: {
+            valueAnimation: true,
+            formatter: '{value}%',
+            fontSize: 22,
+            fontWeight: 'bold',
+            offsetCenter: [0, '70%'],
+            color: '#f1f5f9'
+          },
+          data: [{ value: 60, name: '成本降低'}]
+        },
+        {
+          name: '效率提升',
+          type: 'gauge',
+          center: ['50%', '55%'],
+          radius: '65%',
+          startAngle: 200,
+          endAngle: -20,
+          min: 0,
+          max: 100,
+          splitNumber: 5,
+          itemStyle: {
+            color: '#10b981'
+          },
+          progress: {
+            show: true,
+            width: 18
+          },
+          pointer: {
+            show: true,
+            length: '60%',
+            width: 6
+          },
+          axisLine: {
+            lineStyle: {
+              width: 18,
+              color: [[1, 'rgba(148, 163, 184, 0.2)']]
+            }
+          },
+          axisTick: {
+            distance: -25,
+            splitNumber: 5,
+            lineStyle: {
+              width: 1,
+              color: '#94a3b8'
+            }
+          },
+          splitLine: {
+            distance: -30,
+            length: 12,
+            lineStyle: {
+              width: 2,
+              color: '#94a3b8'
+            }
+          },
+          axisLabel: {
+            distance: -15,
+            color: '#94a3b8',
+            fontSize: 11
+          },
+          anchor: {
+            show: true,
+            size: 8,
+            itemStyle: {
+              borderColor: '#10b981',
+              borderWidth: 2
+            }
+          },
+          detail: {
+            valueAnimation: true,
+            formatter: '{value}%',
+            fontSize: 22,
+            fontWeight: 'bold',
+            offsetCenter: [0, '70%'],
+            color: '#f1f5f9'
+          },
+          data: [{ value: 80, name: '效率提升'}]
+        },
+        {
+          name: '客户满意度',
+          type: 'gauge',
+          center: ['80%', '55%'],
+          radius: '65%',
+          startAngle: 200,
+          endAngle: -20,
+          min: 0,
+          max: 100,
+          splitNumber: 5,
+          itemStyle: {
+            color: '#f59e0b'
+          },
+          progress: {
+            show: true,
+            width: 18
+          },
+          pointer: {
+            show: true,
+            length: '60%',
+            width: 6
+          },
+          axisLine: {
+            lineStyle: {
+              width: 18,
+              color: [[1, 'rgba(148, 163, 184, 0.2)']]
+            }
+          },
+          axisTick: {
+            distance: -25,
+            splitNumber: 5,
+            lineStyle: {
+              width: 1,
+              color: '#94a3b8'
+            }
+          },
+          splitLine: {
+            distance: -30,
+            length: 12,
+            lineStyle: {
+              width: 2,
+              color: '#94a3b8'
+            }
+          },
+          axisLabel: {
+            distance: -15,
+            color: '#94a3b8',
+            fontSize: 11
+          },
+          anchor: {
+            show: true,
+            size: 8,
+            itemStyle: {
+              borderColor: '#f59e0b',
+              borderWidth: 2
+            }
+          },
+          detail: {
+            valueAnimation: true,
+            formatter: '{value}%',
+            fontSize: 22,
+            fontWeight: 'bold',
+            offsetCenter: [0, '70%'],
+            color: '#f1f5f9'
+          },
+          data: [{ value: 92, name: '客户满意度'}]
+        }
+      ]
+    };
+    metricsChart.setOption(option);
+    window.addEventListener('resize', () => metricsChart.resize());
+  </script>
+</section>
+<section data-page-id="p04" class="deck-page">
+  <style>
+    .deck-page {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 40px;
+      box-sizing: border-box;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .page-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #3b82f6;
+      margin: 0 0 16px 0;
+      letter-spacing: -0.02em;
+    }
+
+    .page-subtitle {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      margin: 0;
+      max-width: 500px;
+    }
+
+    .challenges-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .challenge-card {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 16px;
+      padding: 40px 28px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .challenge-card:hover {
+      background: rgba(59, 130, 246, 0.12);
+      border-color: rgba(59, 130, 246, 0.4);
+      transform: translateY(-4px);
+    }
+
+    .challenge-icon {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, #3b82f6, #60a5fa);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 28px;
+    }
+
+    .challenge-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin: 0 0 12px 0;
+    }
+
+    .challenge-desc {
+      font-size: 0.95rem;
+      color: #94a3b8;
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .highlight-text {
+      color: #3b82f6;
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      .challenges-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+
+      .page-title {
+        font-size: 2rem;
+      }
+
+      .challenge-card {
+        padding: 32px 24px;
+      }
+    }
+  </style>
+
+  <header class="page-header">
+    <h1 class="page-title">现状分析与挑战</h1>
+    <p class="page-subtitle">传统客服模式面临严峻考验，数字化转型势在必行</p>
+  </header>
+
+  <div class="challenges-grid">
+    <article class="challenge-card">
+      <div class="challenge-icon">⏱</div>
+      <h2 class="challenge-title">响应慢</h2>
+      <p class="challenge-desc">人工客服响应时间长<br>高峰期排队严重<br>客户等待焦虑</p>
+    </article>
+
+    <article class="challenge-card">
+      <div class="challenge-icon">💰</div>
+      <h2 class="challenge-title">成本高</h2>
+      <p class="challenge-desc">人力投入持续增加<br>培训管理成本攀升<br>效率提升困难</p>
+    </article>
+
+    <article class="challenge-card">
+      <div class="challenge-icon">⚡</div>
+      <h2 class="challenge-title">体验不稳定</h2>
+      <p class="challenge-desc">服务质量参差不齐<br>情绪波动影响服务<br>客户满意度低</p>
+    </article>
+  </div>
+</section>
+<section data-page-id="p05" class="deck-page">
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-light: #60a5fa;
+      --bg-dark: #0f172a;
+      --bg-card: #1e293b;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+    [data-page-id="p05"] {
+      min-height: 100vh;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    [data-page-id="p05"]::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 30%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+                  radial-gradient(circle at 70% 70%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
+      pointer-events: none;
+    }
+    [data-page-id="p05"] .page-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--primary);
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
+    [data-page-id="p05"] .main-title {
+      font-size: 42px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      text-align: center;
+      background: linear-gradient(135deg, var(--text-main) 0%, var(--primary-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    [data-page-id="p05"] .core-statement {
+      font-size: 18px;
+      color: var(--text-muted);
+      text-align: center;
+      max-width: 700px;
+      line-height: 1.8;
+      margin-bottom: 50px;
+    }
+    [data-page-id="p05"] .core-statement strong {
+      color: var(--primary-light);
+      font-weight: 600;
+    }
+    [data-page-id="p05"] .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      max-width: 900px;
+      width: 100%;
+    }
+    [data-page-id="p05"] .feature-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 16px;
+      padding: 32px 24px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+    [data-page-id="p05"] .feature-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(59, 130, 246, 0.15);
+    }
+    [data-page-id="p05"] .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      border-radius: 12px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+    [data-page-id="p05"] .feature-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--text-main);
+    }
+    [data-page-id="p05"] .feature-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    [data-page-id="p05"] .vision-tagline {
+      margin-top: 50px;
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-main);
+      text-align: center;
+      padding: 20px 40px;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+      border-radius: 12px;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    [data-page-id="p05"] .vision-tagline span {
+      color: var(--primary-light);
+    }
+  </style>
+
+  <div class="page-label">愿景定义</div>
+  <h1 class="main-title">AI原生客服愿景</h1>
+  <p class="core-statement">
+    AI原生客服是<span>架构层面的根本性重构</span>，而非简单叠加AI功能。<br>
+    从底层设计融入AI能力，实现智能化服务的全新范式。
+  </p>
+
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🏗️</div>
+      <h3 class="feature-title">原生架构</h3>
+      <p class="feature-desc">从零构建，AI能力深度融入系统底层架构</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3 class="feature-title">智能决策</h3>
+      <p class="feature-desc">AI驱动的意图理解与精准响应能力</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <h3 class="feature-title">持续进化</h3>
+      <p class="feature-desc">数据驱动的自学习与自适应优化机制</p>
+    </div>
+  </div>
+
+  <div class="vision-tagline">
+    <span>重新定义</span>客服体验的智能边界
+  </div>
+</section>
+<section data-page-id="p06" class="deck-page">
+  <style>
+    .p06-comparison {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      padding: 60px 40px;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #f1f5f9;
+    }
+    .p06-header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+    .p06-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #3b82f6;
+      margin: 0 0 15px 0;
+    }
+    .p06-subtitle {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      margin: 0;
+      max-width: 80ch;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .p06-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 30px;
+      max-width: 1400px;
+      margin: 0 auto;
+      align-items: stretch;
+    }
+    .p06-card {
+      background: rgba(30, 41, 59, 0.8);
+      border-radius: 16px;
+      padding: 35px;
+      border: 2px solid;
+      position: relative;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .p06-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+    .p06-card-traditional {
+      border-color: #475569;
+    }
+    .p06-card-ai {
+      border-color: #3b82f6;
+      box-shadow: 0 0 30px rgba(59, 130, 246, 0.15);
+    }
+    .p06-card-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 25px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .p06-card-traditional .p06-card-title {
+      color: #94a3b8;
+    }
+    .p06-card-ai .p06-card-title {
+      color: #3b82f6;
+    }
+    .p06-icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      font-size: 1.3rem;
+    }
+    .p06-card-traditional .p06-icon {
+      background: rgba(71, 85, 105, 0.3);
+    }
+    .p06-card-ai .p06-icon {
+      background: rgba(59, 130, 246, 0.2);
+    }
+    .p06-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 10px;
+    }
+    .p06-item:last-child {
+      margin-bottom: 0;
+    }
+    .p06-bullet {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .p06-card-traditional .p06-bullet {
+      background: #475569;
+      color: #cbd5e1;
+    }
+    .p06-card-ai .p06-bullet {
+      background: #3b82f6;
+      color: #ffffff;
+    }
+    .p06-item-content h4 {
+      margin: 0 0 5px 0;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    .p06-card-traditional .p06-item-content h4 {
+      color: #cbd5e1;
+    }
+    .p06-card-ai .p06-item-content h4 {
+      color: #e2e8f0;
+    }
+    .p06-item-content p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .p06-vs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #3b82f6;
+      background: rgba(59, 130, 246, 0.1);
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      align-self: center;
+    }
+    .p06-arrow {
+      text-align: center;
+      padding: 20px;
+    }
+    .p06-arrow svg {
+      width: 50px;
+      height: 50px;
+      fill: #3b82f6;
+    }
+  </style>
+  
+  <div class="p06-comparison">
+    <div class="p06-header">
+      <h1 class="p06-title">架构对比</h1>
+      <p class="p06-subtitle">从烟囱式到平台化、从规则驱动到数据驱动的架构演进</p>
+    </div>
+    
+    <div class="p06-grid">
+      <div class="p06-card p06-card-traditional">
+        <h2 class="p06-card-title">
+          <span class="p06-icon">🏗️</span>
+          传统架构
+        </h2>
+        <div class="p06-item">
+          <span class="p06-bullet">1</span>
+          <div class="p06-item-content">
+            <h4>烟囱式系统</h4>
+            <p>各业务系统独立建设，数据孤岛严重</p>
+          </div>
+        </div>
+        <div class="p06-item">
+          <span class="p06-bullet">2</span>
+          <div class="p06-item-content">
+            <h4>规则驱动</h4>
+            <p>依赖人工编写的固定规则，灵活度低</p>
+          </div>
+        </div>
+        <div class="p06-item">
+          <span class="p06-bullet">3</span>
+          <div class="p06-item-content">
+            <h4>被动响应</h4>
+            <p>人工干预为主，响应周期长</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="p06-vs">VS</div>
+      
+      <div class="p06-card p06-card-ai">
+        <h2 class="p06-card-title">
+          <span class="p06-icon">🚀</span>
+          AI原生架构
+        </h2>
+        <div class="p06-item">
+          <span class="p06-bullet">1</span>
+          <div class="p06-item-content">
+            <h4>平台化架构</h4>
+            <p>统一数据底座，全域数据融合共享</p>
+          </div>
+        </div>
+        <div class="p06-item">
+          <span class="p06-bullet">2</span>
+          <div class="p06-item-content">
+            <h4>数据驱动</h4>
+            <p>AI模型自主学习决策，智能适应</p>
+          </div>
+        </div>
+        <div class="p06-item">
+          <span class="p06-bullet">3</span>
+          <div class="p06-item-content">
+            <h4>主动智能</h4>
+            <p>实时感知预测，全自动闭环</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-page-id="p07" class="deck-page" style="background-color: #0f172a; min-height: 100vh; padding: 3rem 2rem; box-sizing: border-box;">
+  <div style="max-width: 1300px; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem;">
+    
+    <!-- Header Section -->
+    <header style="text-align: center; margin-bottom: 1rem;">
+      <h1 style="color: #f1f5f9; font-family: Arial, sans-serif; font-size: 2.5rem; margin: 0 0 1rem 0; font-weight: bold;">目标系统架构</h1>
+      <p style="color: #94a3b8; font-family: Arial, sans-serif; font-size: 1.2rem; margin: 0; max-width: 700px; margin: 0 auto;">分层解耦的AI原生架构，支持弹性扩展和持续演进</p>
+    </header>
+    
+    <!-- Main Content Grid -->
+    <div style="display: grid; grid-template-columns: 280px 1fr; gap: 2rem; align-items: start;">
+      
+      <!-- Left Sidebar - Features List -->
+      <aside style="background: linear-gradient(180deg, rgba(30,41,59,0.8) 0%, rgba(15,23,42,0.9) 100%); border-radius: 16px; padding: 2rem; border: 1px solid rgba(59,130,246,0.3);">
+        <h2 style="color: #3b82f6; font-family: Arial, sans-serif; font-size: 1.3rem; margin: 0 0 1.5rem 0; font-weight: bold;">核心特性</h2>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1rem;">
+          <li style="display: flex; align-items: center; gap: 0.75rem; color: #f1f5f9; font-family: Arial, sans-serif; font-size: 1rem;">
+            <span style="background: linear-gradient(135deg, #3b82f6, #6366f1); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"></span>
+            微服务化设计
+          </li>
+          <li style="display: flex; align-items: center; gap: 0.75rem; color: #f1f5f9; font-family: Arial, sans-serif; font-size: 1rem;">
+            <span style="background: linear-gradient(135deg, #0ea5e9, #06b6d4); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"></span>
+            弹性扩缩容
+          </li>
+          <li style="display: flex; align-items: center; gap: 0.75rem; color: #f1f5f9; font-family: Arial, sans-serif; font-size: 1rem;">
+            <span style="background: linear-gradient(135deg, #8b5cf6, #a855f7); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"></span>
+            模块化部署
+          </li>
+          <li style="display: flex; align-items: center; gap: 0.75rem; color: #f1f5f9; font-family: Arial, sans-serif; font-size: 1rem;">
+            <span style="background: linear-gradient(135deg, #10b981, #34d399); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"></span>
+            智能调度层
+          </li>
+          <li style="display: flex; align-items: center; gap: 0.75rem; color: #f1f5f9; font-family: Arial, sans-serif; font-size: 1rem;">
+            <span style="background: linear-gradient(135deg, #f59e0b, #fbbf24); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;"></span>
+            DevOps 持续交付
+          </li>
+        </ul>
+        
+        <!-- Stats Section -->
+        <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(148,163,184,0.2);">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div style="text-align: center;">
+              <div style="color: #3b82f6; font-family: Arial, sans-serif; font-size: 1.8rem; font-weight: bold;">99.9%</div>
+              <div style="color: #94a3b8; font-family: Arial, sans-serif; font-size: 0.8rem;">可用性</div>
+            </div>
+            <div style="text-align: center;">
+              <div style="color: #0ea5e9; font-family: Arial, sans-serif; font-size: 1.8rem; font-weight: bold;">&lt;100ms</div>
+              <div style="color: #94a3b8; font-family: Arial, sans-serif; font-size: 0.8rem;">响应时间</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+      
+      <!-- Right Side - Architecture Diagram -->
+      <div style="background: rgba(30,41,59,0.5); border-radius: 16px; padding: 1.5rem; border: 1px solid rgba(59,130,246,0.2);">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 450" style="width: 100%; height: auto;">
+          <defs>
+            <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#1e293b"/>
+              <stop offset="100%" style="stop-color:#0f172a"/>
+            </linearGradient>
+            <linearGradient id="aiLayerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#3b82f6"/>
+              <stop offset="100%" style="stop-color:#6366f1"/>
+            </linearGradient>
+            <linearGradient id="serviceLayerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#0ea5e9"/>
+              <stop offset="100%" style="stop-color:#06b6d4"/>
+            </linearGradient>
+            <linearGradient id="dataLayerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#8b5cf6"/>
+              <stop offset="100%" style="stop-color:#a855f7"/>
+            </linearGradient>
+            <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+            </filter>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6"/>
+            </marker>
+          </defs>
+          
+          <!-- 背景 -->
+          <rect width="900" height="450" fill="url(#bgGrad)" rx="12"/>
+          
+          <!-- AI 层 -->
+          <g transform="translate(30, 55)">
+            <rect width="840" height="100" fill="#1e3a5f" rx="8" opacity="0.6"/>
+            <text x="15" y="25" fill="#3b82f6" font-family="Arial, sans-serif" font-size="14" font-weight="bold">🚀 AI 层</text>
+            
+            <!-- AI组件 -->
+            <g transform="translate(40, 40)">
+              <rect width="105" height="45" fill="url(#aiLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">大语言模型</text>
+            </g>
+            
+            <g transform="translate(165, 40)">
+              <rect width="105" height="45" fill="url(#aiLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">ML 引擎</text>
+            </g>
+            
+            <g transform="translate(290, 40)">
+              <rect width="105" height="45" fill="url(#aiLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">知识图谱</text>
+            </g>
+            
+            <g transform="translate(415, 40)">
+              <rect width="105" height="45" fill="url(#aiLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">NLP 处理</text>
+            </g>
+            
+            <g transform="translate(540, 40)">
+              <rect width="105" height="45" fill="url(#aiLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">图像识别</text>
+            </g>
+            
+            <g transform="translate(665, 40)">
+              <rect width="105" height="45" fill="url(#aiLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">语音识别</text>
+            </g>
+          </g>
+          
+          <!-- 连接线 AI -> Service -->
+          <g stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#arrowhead)">
+            <line x1="92" y1="155" x2="92" y2="185"/>
+            <line x1="217" y1="155" x2="217" y2="185"/>
+            <line x1="342" y1="155" x2="342" y2="185"/>
+            <line x1="467" y1="155" x2="467" y2="185"/>
+            <line x1="592" y1="155" x2="592" y2="185"/>
+            <line x1="717" y1="155" x2="717" y2="185"/>
+          </g>
+          
+          <!-- 服务层 -->
+          <g transform="translate(30, 185)">
+            <rect width="840" height="100" fill="#164e63" rx="8" opacity="0.6"/>
+            <text x="15" y="25" fill="#0ea5e9" font-family="Arial, sans-serif" font-size="14" font-weight="bold">⚙️ 服务层</text>
+            
+            <g transform="translate(40, 40)">
+              <rect width="105" height="45" fill="url(#serviceLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">API 网关</text>
+            </g>
+            
+            <g transform="translate(165, 40)">
+              <rect width="105" height="45" fill="url(#serviceLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">业务服务</text>
+            </g>
+            
+            <g transform="translate(290, 40)">
+              <rect width="105" height="45" fill="url(#serviceLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">用户管理</text>
+            </g>
+            
+            <g transform="translate(415, 40)">
+              <rect width="105" height="45" fill="url(#serviceLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">消息队列</text>
+            </g>
+            
+            <g transform="translate(540, 40)">
+              <rect width="105" height="45" fill="url(#serviceLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">缓存服务</text>
+            </g>
+            
+            <g transform="translate(665, 40)">
+              <rect width="105" height="45" fill="url(#serviceLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="52" y="27" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">安全认证</text>
+            </g>
+          </g>
+          
+          <!-- 连接线 Service -> Data -->
+          <g stroke="#0ea5e9" stroke-width="2" fill="none" marker-end="url(#arrowhead)">
+            <line x1="92" y1="285" x2="92" y2="315"/>
+            <line x1="217" y1="285" x2="217" y2="315"/>
+            <line x1="342" y1="285" x2="342" y2="315"/>
+            <line x1="467" y1="285" x2="467" y2="315"/>
+            <line x1="592" y1="285" x2="592" y2="315"/>
+            <line x1="717" y1="285" x2="717" y2="315"/>
+          </g>
+          
+          <!-- 数据层 -->
+          <g transform="translate(30, 315)">
+            <rect width="840" height="80" fill="#4c1d95" rx="8" opacity="0.6"/>
+            <text x="15" y="22" fill="#a855f7" font-family="Arial, sans-serif" font-size="14" font-weight="bold">💾 数据层</text>
+            
+            <g transform="translate(50, 35)">
+              <rect width="115" height="35" fill="url(#dataLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="57" y="22" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">关系数据库</text>
+            </g>
+            
+            <g transform="translate(185, 35)">
+              <rect width="115" height="35" fill="url(#dataLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="57" y="22" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">缓存存储</text>
+            </g>
+            
+            <g transform="translate(320, 35)">
+              <rect width="115" height="35" fill="url(#dataLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="57" y="22" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">文件存储</text>
+            </g>
+            
+            <g transform="translate(455, 35)">
+              <rect width="115" height="35" fill="url(#dataLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="57" y="22" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">日志系统</text>
+            </g>
+            
+            <g transform="translate(590, 35)">
+              <rect width="115" height="35" fill="url(#dataLayerGrad)" rx="8" filter="url(#shadow)"/>
+              <text x="57" y="22" text-anchor="middle" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="11">数据湖</text>
+            </g>
+          </g>
+        </svg>
+      </div>
+      
+    </div>
+    
+    <!-- Footer -->
+    <footer style="text-align: center; padding-top: 1rem; border-top: 1px solid rgba(148,163,184,0.1);">
+      <p style="color: #64748b; font-family: Arial, sans-serif; font-size: 0.85rem; margin: 0;">AI-Driven Architecture • Cloud-Native Design • Enterprise Ready</p>
+    </footer>
+    
+  </div>
+</section>
+<section data-page-id="p08" class="deck-page">
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --bg: #0f172a;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --card-bg: #1e293b;
+      --card-hover: #334155;
+    }
+    
+    .p08-container {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    
+    .p08-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    
+    .p08-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin: 0 0 1rem 0;
+      background: linear-gradient(135deg, var(--text) 0%, var(--primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .p08-subtitle {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      margin: 0;
+      max-width: 500px;
+    }
+    
+    .p08-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+      max-width: 800px;
+      width: 100%;
+    }
+    
+    .p08-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+    }
+    
+    .p08-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--primary), transparent);
+    }
+    
+    .p08-card:hover {
+      background: var(--card-hover);
+      border-color: var(--primary);
+      transform: translateY(-4px);
+    }
+    
+    .p08-card-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(59, 130, 246, 0.15);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+      font-size: 1.5rem;
+    }
+    
+    .p08-card-num {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      font-size: 3rem;
+      font-weight: 800;
+      color: rgba(59, 130, 246, 0.1);
+      line-height: 1;
+    }
+    
+    .p08-card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 0.75rem 0;
+      color: var(--text);
+    }
+    
+    .p08-card-desc {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin: 0;
+      line-height: 1.6;
+    }
+    
+    @media (max-width: 600px) {
+      .p08-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .p08-title {
+        font-size: 1.75rem;
+      }
+      
+      .p08-card {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+  
+  <div class="p08-container">
+    <header class="p08-header">
+      <h1 class="p08-title">核心能力设计</h1>
+      <p class="p08-subtitle">四大核心能力构建智能客服能力边界</p>
+    </header>
+    
+    <div class="p08-grid">
+      <div class="p08-card">
+        <span class="p08-card-num">01</span>
+        <div class="p08-card-icon">🎯</div>
+        <h3 class="p08-card-title">智能意图识别</h3>
+        <p class="p08-card-desc">深度理解用户语义，精准识别真实需求意图</p>
+      </div>
+      
+      <div class="p08-card">
+        <span class="p08-card-num">02</span>
+        <div class="p08-card-icon">💬</div>
+        <h3 class="p08-card-title">多轮对话</h3>
+        <p class="p08-card-desc">支持复杂场景连贯交互上下文记忆理解</p>
+      </div>
+      
+      <div class="p08-card">
+        <span class="p08-card-num">03</span>
+        <div class="p08-card-icon">❤️</div>
+        <h3 class="p08-card-title">情感分析</h3>
+        <p class="p08-card-desc">感知用户情绪变化，提供有温度的服务</p>
+      </div>
+      
+      <div class="p08-card">
+        <span class="p08-card-num">04</span>
+        <div class="p08-card-icon">⚡</div>
+        <h3 class="p08-card-title">主动服务</h3>
+        <p class="p08-card-desc">预判用户需求，主动提供解决方案</p>
+      </div>
+    </div>
+  </div>
+</section>
+<section data-page-id="p09" class="deck-page" style="background-color: #0f172a; color: #f1f5f9; min-height: 100vh; padding: 60px 40px; box-sizing: border-box;">
+  <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px;">
+    
+    <!-- Header Section -->
+    <div style="text-align: center;">
+      <h2 style="font-size: 42px; font-weight: 700; margin: 0 0 16px 0; color: #f1f5f9; letter-spacing: -0.5px;">
+        实施路线图
+      </h2>
+      <p style="font-size: 18px; color: #94a3b8; margin: 0; max-width: 600px; margin: 0 auto; line-height: 1.6;">
+        三阶段递进实施，12个月内完成传统客服到AI原生的平滑过渡。
+      </p>
+    </div>
+    
+    <!-- Three Phase Cards -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 20px;">
+      
+      <!-- Phase 1 -->
+      <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; border-radius: 16px; padding: 32px 24px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #3b82f6, #60a5fa);"></div>
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+          <div style="width: 48px; height: 48px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);">1</div>
+          <div>
+            <div style="font-size: 20px; font-weight: 600; color: #f1f5f9;">基础构建</div>
+            <div style="font-size: 14px; color: #60a5fa;">1-3月</div>
+          </div>
+        </div>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px;">
+          <li style="display: flex; align-items: flex-start; gap: 10px;">
+            <span style="color: #3b82f6; font-weight: 700;">▸</span>
+            <span style="color: #cbd5e1; font-size: 15px; line-height: 1.5;">数据整合与平台搭建</span>
+          </li>
+        </ul>
+        <div style="margin-top: 20px; padding: 16px; background: #0f172a; border-radius: 10px; border: 1px solid #334155;">
+          <div style="font-size: 12px; color: #60a5fa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">交付物</div>
+          <div style="font-size: 14px; color: #cbd5e1; line-height: 1.8;">
+            • 需求规格说明书<br>
+            • 技术设计方案
+          </div>
+        </div>
+      </div>
+      
+      <!-- Phase 2 -->
+      <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border: 1px solid #3b82f6; border-radius: 16px; padding: 32px 24px; position: relative; overflow: hidden; box-shadow: 0 0 30px rgba(59, 130, 246, 0.15);">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div>
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+          <div style="width: 48px; height: 48px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);">2</div>
+          <div>
+            <div style="font-size: 20px; font-weight: 600; color: #f1f5f9;">智能升级</div>
+            <div style="font-size: 14px; color: #60a5fa;">4-8月</div>
+          </div>
+        </div>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px;">
+          <li style="display: flex; align-items: flex-start; gap: 10px;">
+            <span style="color: #3b82f6; font-weight: 700;">▸</span>
+            <span style="color: #cbd5e1; font-size: 15px; line-height: 1.5;">AI能力嵌入与流程优化</span>
+          </li>
+        </ul>
+        <div style="margin-top: 20px; padding: 16px; background: #0f172a; border-radius: 10px; border: 1px solid #334155;">
+          <div style="font-size: 12px; color: #60a5fa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">交付物</div>
+          <div style="font-size: 14px; color: #cbd5e1; line-height: 1.8;">
+            • 可运行系统<br>
+            • 测试报告
+          </div>
+        </div>
+      </div>
+      
+      <!-- Phase 3 -->
+      <div style="background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%); border: 1px solid #334155; border-radius: 16px; padding: 32px 24px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #3b82f6, #93c5fd);"></div>
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+          <div style="width: 48px; height: 48px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);">3</div>
+          <div>
+            <div style="font-size: 20px; font-weight: 600; color: #f1f5f9;">全面原生</div>
+            <div style="font-size: 14px; color: #60a5fa;">9-12月</div>
+          </div>
+        </div>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px;">
+          <li style="display: flex; align-items: flex-start; gap: 10px;">
+            <span style="color: #3b82f6; font-weight: 700;">▸</span>
+            <span style="color: #cbd5e1; font-size: 15px; line-height: 1.5;">全场景智能覆盖与持续迭代</span>
+          </li>
+        </ul>
+        <div style="margin-top: 20px; padding: 16px; background: #0f172a; border-radius: 10px; border: 1px solid #334155;">
+          <div style="font-size: 12px; color: #60a5fa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">交付物</div>
+          <div style="font-size: 14px; color: #cbd5e1; line-height: 1.8;">
+            • 上线报告<br>
+            • 用户培训材料
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Timeline SVG -->
+    <div style="background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); border-radius: 16px; padding: 30px; border: 1px solid #334155;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 350" width="100%" height="auto" style="display: block;">
+        <defs>
+          <linearGradient id="lineGradNew" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+            <stop offset="50%" style="stop-color:#60a5fa;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+          </linearGradient>
+          <filter id="glowNew">
+            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+          <marker id="arrowheadNew" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6"/>
+          </marker>
+        </defs>
+        
+        <!-- Timeline Line -->
+        <line x1="100" y1="100" x2="1100" y2="100" stroke="url(#lineGradNew)" stroke-width="4" filter="url(#glowNew)"/>
+        
+        <!-- Arrow -->
+        <polygon points="1100,100 1082,92 1082,108" fill="#3b82f6"/>
+        
+        <!-- Phase 1 Node -->
+        <g transform="translate(200, 100)">
+          <circle cx="0" cy="0" r="28" fill="#3b82f6" stroke="#60a5fa" stroke-width="3" filter="url(#glowNew)"/>
+          <text x="0" y="6" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">1</text>
+          <text x="0" y="-50" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#f1f5f9">准备阶段</text>
+          <text x="0" y="-25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#60a5fa">Q1 2025</text>
+          <rect x="-70" y="45" width="140" height="35" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
+          <text x="0" y="68" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#22c55e">✓ 需求分析完成</text>
+        </g>
+        
+        <!-- Phase 2 Node -->
+        <g transform="translate(600, 100)">
+          <circle cx="0" cy="0" r="35" fill="#3b82f6" stroke="#60a5fa" stroke-width="3" filter="url(#glowNew)"/>
+          <text x="0" y="7" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#ffffff">2</text>
+          <text x="0" y="-55" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#f1f5f9">实施阶段</text>
+          <text x="0" y="-30" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#60a5fa">Q2-Q3 2025</text>
+          <rect x="-80" y="50" width="160" height="35" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
+          <text x="0" y="73" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#eab308">◉ 核心功能开发</text>
+          <rect x="-80" y="95" width="160" height="35" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
+          <text x="0" y="118" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#94a3b8">○ 系统测试</text>
+        </g>
+        
+        <!-- Phase 3 Node -->
+        <g transform="translate(1000, 100)">
+          <circle cx="0" cy="0" r="28" fill="#3b82f6" stroke="#60a5fa" stroke-width="3" filter="url(#glowNew)"/>
+          <text x="0" y="6" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">3</text>
+          <text x="0" y="-50" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#f1f5f9">上线阶段</text>
+          <text x="0" y="-25" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#60a5fa">Q4 2025</text>
+          <rect x="-70" y="45" width="140" height="35" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
+          <text x="0" y="68" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#94a3b8">○ 系统正式上线</text>
+        </g>
+        
+        <!-- Connecting Paths -->
+        <path d="M 260 100 L 520 100" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#arrowheadNew)"/>
+        <path d="M 680 100 L 920 100" stroke="#3b82f6" stroke-width="2" fill="none" marker-end="url(#arrowheadNew)"/>
+        
+        <!-- Legend -->
+        <g transform="translate(400, 260)">
+          <circle cx="0" cy="0" r="6" fill="#22c55e"/>
+          <text x="15" y="5" font-family="Arial, sans-serif" font-size="12" fill="#94a3b8">已完成</text>
+          <circle cx="100" cy="0" r="6" fill="#eab308"/>
+          <text x="115" y="5" font-family="Arial, sans-serif" font-size="12" fill="#94a3b8">进行中</text>
+          <circle cx="200" cy="0" r="6" fill="#94a3b8"/>
+          <text x="215" y="5" font-family="Arial, sans-serif" font-size="12" fill="#94a3b8">待开始</text>
+        </g>
+      </svg>
+    </div>
+    
+    <!-- Progress Summary -->
+    <div style="display: flex; justify-content: center; gap: 40px; padding: 20px 0;">
+      <div style="text-align: center;">
+        <div style="font-size: 48px; font-weight: 700; color: #3b82f6; line-height: 1;">12</div>
+        <div style="font-size: 14px; color: #94a3b8; margin-top: 8px;">总周期（月）</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 48px; font-weight: 700; color: #60a5fa; line-height: 1;">3</div>
+        <div style="font-size: 14px; color: #94a3b8; margin-top: 8px;">实施阶段</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 48px; font-weight: 700; color: #f1f5f9; line-height: 1;">100%</div>
+        <div style="font-size: 14px; color: #94a3b8; margin-top: 8px;">覆盖范围</div>
+      </div>
+    </div>
+    
+  </div>
+</section>
+<section data-page-id="p10" class="deck-page">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    .deck-page {
+      background-color: #0f172a;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 60px 40px;
+    }
+    .page-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #3b82f6;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 1.25rem;
+      color: #94a3b8;
+      margin-bottom: 48px;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.6;
+    }
+    .subtitle strong {
+      color: #3b82f6;
+      font-weight: 700;
+    }
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      max-width: 1400px;
+      margin: 0 auto;
+      align-items: start;
+    }
+    .metrics-section {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 16px;
+      padding: 32px;
+    }
+    .metrics-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #3b82f6;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .metrics-title::before {
+      content: '';
+      width: 4px;
+      height: 24px;
+      background: #3b82f6;
+      border-radius: 2px;
+    }
+    .metrics-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .metrics-list li {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      border-left: 3px solid #3b82f6;
+      transition: all 0.3s ease;
+    }
+    .metrics-list li:hover {
+      background: rgba(59, 130, 246, 0.1);
+      transform: translateX(8px);
+    }
+    .metric-icon {
+      width: 40px;
+      height: 40px;
+      background: #3b82f6;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .metric-text {
+      font-size: 1.1rem;
+      color: #f1f5f9;
+    }
+    .metric-highlight {
+      color: #3b82f6;
+      font-weight: 700;
+    }
+    .chart-section {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      padding: 24px;
+      min-height: 500px;
+    }
+    .chart-container {
+      width: 100%;
+      height: 450px;
+    }
+    .stats-bar {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 48px;
+      flex-wrap: wrap;
+    }
+    .stat-item {
+      text-align: center;
+      padding: 24px 32px;
+      background: rgba(59, 130, 246, 0.08);
+      border-radius: 12px;
+      border: 1px solid rgba(59, 130, 246, 0.15);
+      min-width: 180px;
+    }
+    .stat-value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #3b82f6;
+      margin-bottom: 8px;
+    }
+    .stat-label {
+      font-size: 1rem;
+      color: #94a3b8;
+    }
+    @media (max-width: 968px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+      .page-title {
+        font-size: 2rem;
+      }
+      .stats-bar {
+        gap: 24px;
+      }
+    }
+  </style>
+
+  <h1 class="page-title">价值评估</h1>
+  <p class="subtitle">
+    预计年度成本节省<strong>1200万元</strong>，投资回报周期<strong>14个月</strong>，量化转型战略价值
+  </p>
+
+  <div class="content-grid">
+    <div class="metrics-section">
+      <h3 class="metrics-title">核心价值指标</h3>
+      <ul class="metrics-list">
+        <li>
+          <div class="metric-icon">💰</div>
+          <span class="metric-text">年度成本节省 <span class="metric-highlight">1200万元</span></span>
+        </li>
+        <li>
+          <div class="metric-icon">📅</div>
+          <span class="metric-text">投资回报周期 <span class="metric-highlight">14个月</span></span>
+        </li>
+        <li>
+          <div class="metric-icon">📊</div>
+          <span class="metric-text">可量化的 <span class="metric-highlight">战略价值</span></span>
+        </li>
+        <li>
+          <div class="metric-icon">💹</div>
+          <span class="metric-text">明确的 <span class="metric-highlight">财务收益</span></span>
+        </li>
+        <li>
+          <div class="metric-icon">🎯</div>
+          <span class="metric-text">可衡量的 <span class="metric-highlight">转型成效</span></span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="chart-section">
+      <div id="costBenefitChart" class="chart-container"></div>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-value">1200万</div>
+      <div class="stat-label">年度节省</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">14月</div>
+      <div class="stat-label">投资回收期</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value">546万</div>
+      <div class="stat-label">年度总节省</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const chart = echarts.init(document.getElementById('costBenefitChart'));
+      
+      const option = {
+        backgroundColor: 'transparent',
+        title: {
+          text: '成本节省分解图',
+          subtext: '价值评估 - 年度累计',
+          left: 'center',
+          top: 10,
+          textStyle: {
+            fontSize: 20,
+            fontWeight: 'bold',
+            color: '#f1f5f9'
+          },
+          subtextStyle: {
+            fontSize: 14,
+            color: '#94a3b8'
+          }
+        },
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+          borderColor: '#3b82f6',
+          borderWidth: 1,
+          textStyle: {
+            color: '#f1f5f9'
+          },
+          formatter: function(params) {
+            return '<div style="font-weight: bold; margin-bottom: 8px;">' + params.name + '</div>' +
+                   '<div>金额: <span style="color: #3b82f6; font-weight: bold;">' + params.value + '万元</span></div>' +
+                   '<div>占比: <span style="color: #3b82f6; font-weight: bold;">' + params.percent + '%</span></div>';
+          }
+        },
+        legend: {
+          orient: 'vertical',
+          left: '5%',
+          top: 'middle',
+          textStyle: {
+            color: '#f1f5f9',
+            fontSize: 13
+          },
+          itemWidth: 16,
+          itemHeight: 16,
+          itemGap: 16
+        },
+        series: [
+          {
+            name: '成本节省分解',
+            type: 'pie',
+            radius: ['30%', '60%'],
+            center: ['55%', '55%'],
+            avoidLabelOverlap: true,
+            itemStyle: {
+              borderRadius: 10,
+              borderColor: '#0f172a',
+              borderWidth: 3
+            },
+            label: {
+              show: true,
+              position: 'outside',
+              formatter: '{b}\n{d}%',
+              color: '#f1f5f9',
+              fontSize: 12,
+              lineHeight: 18
+            },
+            labelLine: {
+              show: true,
+              lineStyle: {
+                color: '#64748b'
+              }
+            },
+            emphasis: {
+              label: {
+                show: true,
+                fontSize: 14,
+                fontWeight: 'bold',
+                color: '#fff'
+              },
+              itemStyle: {
+                shadowBlur: 15,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(59, 130, 246, 0.4)'
+              }
+            },
+            data: [
+              {
+                value: 185,
+                name: '人力成本节省',
+                itemStyle: { color: '#3b82f6' }
+              },
+              {
+                value: 142,
+                name: '运营效率提升',
+                itemStyle: { color: '#60a5fa' }
+              },
+              {
+                value: 98,
+                name: '资源优化配置',
+                itemStyle: { color: '#93c5fd' }
+              },
+              {
+                value: 76,
+                name: '流程自动化',
+                itemStyle: { color: '#bfdbfe' }
+              },
+              {
+                value: 45,
+                name: '其他节省',
+                itemStyle: { color: '#dbeafe' }
+              }
+            ]
+          }
+        ],
+        graphic: {
+          elements: [
+            {
+              type: 'text',
+              left: '54%',
+              top: '50%',
+              style: {
+                text: '546万',
+                textAlign: 'center',
+                fill: '#f1f5f9',
+                fontSize: 32,
+                fontWeight: 'bold'
+              }
+            },
+            {
+              type: 'text',
+              left: '54%',
+              top: '60%',
+              style: {
+                text: '年度总节省',
+                textAlign: 'center',
+                fill: '#94a3b8',
+                fontSize: 14
+              }
+            }
+          ]
+        }
+      };
+      
+      chart.setOption(option);
+      
+      window.addEventListener('resize', function() {
+        chart.resize();
+      });
+    });
+  </script>
+</section>
+<section data-page-id="p11" class="deck-page">
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --primary-light: #60a5fa;
+      --primary-dark: #2563eb;
+      --bg: #0f172a;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --card-bg: rgba(30, 41, 59, 0.8);
+      --border: rgba(59, 130, 246, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    .risk-page {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      padding: 60px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .page-title {
+      font-size: 2.5rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 16px;
+      letter-spacing: 2px;
+    }
+
+    .page-title::before {
+      content: '';
+      display: block;
+      width: 60px;
+      height: 4px;
+      background: var(--primary);
+      margin: 0 auto 20px;
+      border-radius: 2px;
+    }
+
+    .page-subtitle {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      max-width: 600px;
+    }
+
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 30px;
+      max-width: 1200px;
+      width: 100%;
+    }
+
+    .risk-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .risk-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    }
+
+    .risk-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary);
+      box-shadow: 0 20px 40px rgba(59, 130, 246, 0.15);
+    }
+
+    .risk-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin-bottom: 24px;
+    }
+
+    .risk-title {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .risk-desc {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+
+    .strategy-section {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .strategy-label {
+      font-size: 0.8rem;
+      color: var(--primary-light);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .strategy-label::before {
+      content: '→';
+    }
+
+    .strategy-text {
+      font-size: 0.95rem;
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .risk-level {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      margin-bottom: 16px;
+    }
+
+    .footer-note {
+      margin-top: 50px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      max-width: 700px;
+      line-height: 1.8;
+      padding: 20px;
+      background: rgba(59, 130, 246, 0.08);
+      border-radius: 10px;
+      border-left: 3px solid var(--primary);
+    }
+
+    @media (max-width: 900px) {
+      .risk-grid {
+        grid-template-columns: 1fr;
+        max-width: 500px;
+      }
+
+      .page-title {
+        font-size: 2rem;
+      }
+    }
+  </style>
+
+  <div class="risk-page">
+    <header class="page-header">
+      <h1 class="page-title">风险与对策</h1>
+      <p class="page-subtitle">全面识别项目潜在风险，制定分级应对策略，确保项目稳健推进</p>
+    </header>
+
+    <div class="risk-grid">
+      <article class="risk-card">
+        <div class="risk-icon">⚙️</div>
+        <div class="risk-level">⚠ 高风险</div>
+        <h3 class="risk-title">技术风险</h3>
+        <p class="risk-desc">系统架构复杂度高，核心算法精度待验证，技术团队经验尚浅</p>
+        <div class="strategy-section">
+          <div class="strategy-label">应对策略</div>
+          <p class="strategy-text">引入技术顾问，迭代验证算法，建立技术难点攻关小组</p>
+        </div>
+      </article>
+
+      <article class="risk-card">
+        <div class="risk-icon">📊</div>
+        <div class="risk-level">⚡ 中风险</div>
+        <h3 class="risk-title">运营风险</h3>
+        <p class="risk-desc">市场推广效果不确定，用户增长曲线待验证，运营成本超支</p>
+        <div class="strategy-section">
+          <div class="strategy-label">应对策略</div>
+          <p class="strategy-text">分阶段投入，AB测试验证方案，建立成本预警机制</p>
+        </div>
+      </article>
+
+      <article class="risk-card">
+        <div class="risk-icon">📋</div>
+        <div class="risk-level">🔒 低风险</div>
+        <h3 class="risk-title">合规风险</h3>
+        <p class="risk-desc">数据安全法规更新，隐私保护要求严格，资质认证待获取</p>
+        <div class="strategy-section">
+          <div class="strategy-label">应对策略</div>
+          <p class="strategy-text">聘请法务顾问，定期合规审计，提前布局资质认证</p>
+        </div>
+      </article>
+    </div>
+
+    <div class="footer-note">
+      我们坚持坦诚面对项目风险，建立完善的监控预警体系，通过敏捷迭代方式持续优化，确保各类风险可控、在控，为项目成功保驾护航。
+    </div>
+  </div>
+</section>
+<section data-page-id="p12" class="deck-page">
+  <style>
+    [data-page-id="p12"] {
+      --primary: #3b82f6;
+      --bg: #0f172a;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #22c55e;
+    }
+  </style>
+  <div class="closing-wrapper">
+    <div class="closing-content">
+      <div class="summary-badge">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+          <polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        <span>核心结论</span>
+      </div>
+      <h1 class="main-statement">AI原生转型是必选项</h1>
+      <div class="statement-divider"></div>
+      <div class="recommendation-box">
+        <div class="rec-label">建议行动</div>
+        <div class="rec-content">Q2启动一期项目</div>
+      </div>
+      <div class="cta-section">
+        <div class="cta-text">推动决策审批，加速落地执行</div>
+        <div class="cta-button">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="closing-decoration">
+      <div class="deco-ring ring-1"></div>
+      <div class="deco-ring ring-2"></div>
+      <div class="deco-ring ring-3"></div>
+    </div>
+  </div>
+  <style>
+    [data-page-id="p12"] .closing-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      position: relative;
+      overflow: hidden;
+    }
+    [data-page-id="p12"] .closing-content {
+      text-align: center;
+      z-index: 2;
+      padding: 2rem;
+      max-width: 600px;
+    }
+    [data-page-id="p12"] .summary-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      padding: 0.5rem 1.25rem;
+      border-radius: 2rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 2rem;
+    }
+    [data-page-id="p12"] .main-statement {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      color: var(--text);
+      margin: 0 0 1.5rem 0;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+    [data-page-id="p12"] .statement-divider {
+      width: 80px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      margin: 0 auto 2rem;
+      border-radius: 2px;
+    }
+    [data-page-id="p12"] .recommendation-box {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 1rem;
+      padding: 1.5rem 2rem;
+      margin-bottom: 2.5rem;
+    }
+    [data-page-id="p12"] .rec-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    [data-page-id="p12"] .rec-content {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--primary);
+    }
+    [data-page-id="p12"] .cta-section {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+    }
+    [data-page-id="p12"] .cta-text {
+      font-size: 1.125rem;
+      color: var(--text);
+      font-weight: 500;
+    }
+    [data-page-id="p12"] .cta-button {
+      width: 48px;
+      height: 48px;
+      background: var(--primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      cursor: pointer;
+    }
+    [data-page-id="p12"] .cta-button:hover {
+      transform: scale(1.1);
+      box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+    }
+    [data-page-id="p12"] .closing-decoration {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1;
+    }
+    [data-page-id="p12"] .deco-ring {
+      position: absolute;
+      border: 1px solid rgba(59, 130, 246, 0.1);
+      border-radius: 50%;
+    }
+    [data-page-id="p12"] .ring-1 {
+      width: 400px;
+      height: 400px;
+      top: -200px;
+      left: -200px;
+    }
+    [data-page-id="p12"] .ring-2 {
+      width: 600px;
+      height: 600px;
+      top: -300px;
+      left: -300px;
+    }
+    [data-page-id="p12"] .ring-3 {
+      width: 800px;
+      height: 800px;
+      top: -400px;
+      left: -400px;
+    }
+  </style>
+</section>
+<section data-page-id="p13" class="deck-page" style="background-color: #0f172a; min-height: 100vh; padding: 3rem 2rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #f1f5f9;">
+  <style>
+    .spec-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .spec-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .spec-title {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #3b82f6;
+      margin-bottom: 1rem;
+    }
+    .spec-subtitle {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .spec-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .spec-card {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+    }
+    .spec-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-2px);
+    }
+    .spec-card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #3b82f6;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .spec-card-title::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: #3b82f6;
+      border-radius: 2px;
+    }
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .spec-table th,
+    .spec-table td {
+      padding: 0.75rem 0.5rem;
+      text-align: left;
+      border-bottom: 1px solid #334155;
+    }
+    .spec-table th {
+      color: #94a3b8;
+      font-weight: 500;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .spec-table td {
+      font-size: 0.95rem;
+    }
+    .spec-table .param-name {
+      color: #f1f5f9;
+      font-weight: 500;
+    }
+    .spec-table .param-value {
+      color: #3b82f6;
+      font-family: 'Courier New', monospace;
+    }
+    .spec-highlight {
+      background: rgba(59, 130, 246, 0.1);
+      border-left: 3px solid #3b82f6;
+      padding: 1rem 1.25rem;
+      border-radius: 0 8px 8px 0;
+      margin-top: 1rem;
+    }
+    .spec-highlight-title {
+      font-weight: 600;
+      color: #3b82f6;
+      margin-bottom: 0.5rem;
+    }
+    .spec-highlight-content {
+      font-size: 0.9rem;
+      color: #cbd5e1;
+      line-height: 1.6;
+    }
+    .note-section {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .note-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #f59e0b;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .note-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .note-list li {
+      padding: 0.5rem 0;
+      padding-left: 1.5rem;
+      position: relative;
+      color: #cbd5e1;
+      font-size: 0.95rem;
+    }
+    .note-list li::before {
+      content: '•';
+      position: absolute;
+      left: 0;
+      color: #f59e0b;
+    }
+  </style>
+
+  <div class="spec-container">
+    <div class="spec-header">
+      <h1 class="spec-title">附录：技术规格</h1>
+      <p class="spec-subtitle">详细技术指标与选型参考，为技术负责人提供完整的实现依据</p>
+    </div>
+
+    <div class="spec-grid">
+      <div class="spec-card">
+        <h3 class="spec-card-title">性能指标</h3>
+        <table class="spec-table">
+          <tr>
+            <th>参数</th>
+            <th>规格值</th>
+          </tr>
+          <tr>
+            <td class="param-name">响应时间</td>
+            <td class="param-value">≤200ms (P95)</td>
+          </tr>
+          <tr>
+            <td class="param-name">吞吐量</td>
+            <td class="param-value">10,000 QPS</td>
+          </tr>
+          <tr>
+            <td class="param-name">并发连接</td>
+            <td class="param-value">50,000 Max</td>
+          </tr>
+          <tr>
+            <td class="param-name">可用性</td>
+            <td class="param-value">99.95% SLA</td>
+          </tr>
+        </table>
+        <div class="spec-highlight">
+          <div class="spec-highlight-title">选型说明</div>
+          <div class="spec-highlight-content">基于中等规模业务场景设计，满足当前业务量3倍的扩展需求</div>
+        </div>
+      </div>
+
+      <div class="spec-card">
+        <h3 class="spec-card-title">存储规格</h3>
+        <table class="spec-table">
+          <tr>
+            <th>参数</th>
+            <th>规格值</th>
+          </tr>
+          <tr>
+            <td class="param-name">数据总量</td>
+            <td class="param-value">500GB / 月</td>
+          </tr>
+          <tr>
+            <td class="param-name">单表容量</td>
+            <td class="param-value">1亿条记录</td>
+          </tr>
+          <tr>
+            <td class="param-name">备份策略</td>
+            <td class="param-value">全量 + 增量</td>
+          </tr>
+          <tr>
+            <td class="param-name">保留周期</td>
+            <td class="param-value">24个月</td>
+          </tr>
+        </table>
+        <div class="spec-highlight">
+          <div class="spec-highlight-title">选型说明</div>
+          <div class="spec-highlight-content">采用冷热数据分离策略，热数据SSD存储，历史数据归档至对象存储</div>
+        </div>
+      </div>
+
+      <div class="spec-card">
+        <h3 class="spec-card-title">网络配置</h3>
+        <table class="spec-table">
+          <tr>
+            <th>参数</th>
+            <th>规格值</th>
+          </tr>
+          <tr>
+            <td class="param-name">带宽</td>
+            <td class="param-value">1Gbps 共享</td>
+          </tr>
+          <tr>
+            <td class="param-name">CDN节点</td>
+            <td class="param-value">200+ 覆盖</td>
+          </tr>
+          <tr>
+            <td class="param-name">DDoS防护</td>
+            <td class="param-value">500Gbps</td>
+          </tr>
+          <tr>
+            <td class="param-name">SSL/TLS</td>
+            <td class="param-value">TLS 1.3</td>
+          </tr>
+        </table>
+        <div class="spec-highlight">
+          <div class="spec-highlight-title">选型说明</div>
+          <div class="spec-highlight-content">采用BGP多线接入，智能DNS解析确保跨运营商访问体验</div>
+        </div>
+      </div>
+
+      <div class="spec-card">
+        <h3 class="spec-card-title">安全标准</h3>
+        <table class="spec-table">
+          <tr>
+            <th>参数</th>
+            <th>规格值</th>
+          </tr>
+          <tr>
+            <td class="param-name">等保等级</td>
+            <td class="param-value">三级等保</td>
+          </tr>
+          <tr>
+            <td class="param-name">数据加密</td>
+            <td class="param-value">AES-256</td>
+          </tr>
+          <tr>
+            <td class="param-name">访问控制</td>
+            <td class="param-value">RBAC + MFA</td>
+          </tr>
+          <tr>
+            <td class="param-name">审计日志</td>
+            <td class="param-value">180天保留</td>
+          </tr>
+        </table>
+        <div class="spec-highlight">
+          <div class="spec-highlight-title">选型说明</div>
+          <div class="spec-highlight-content">符合行业合规要求，支持自定义安全策略与告警规则配置</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3 class="note-title">⚠️ 重要选型建议</h3>
+      <ul class="note-list">
+        <li>建议在生产环境前进行性能压测，验证是否满足实际业务峰值需求</li>
+        <li>存储规格可根据数据增长趋势动态扩容，建议预留20%扩展空间</li>
+        <li>安全配置需根据具体业务场景调整，部分场景需额外安全评估</li>
+        <li>网络配置需结合目标用户地域分布选择合适的CDN节点覆盖</li>
+      </ul>
+    </div>
+  </div>
+</section>
+            </div>
+
+            <div class="deck-controls">
+                <button class="deck-nav-btn" id="prevBtn" onclick="prevPage()">← 上一页</button>
+                <span class="deck-page-indicator" id="pageIndicator">1 / 13</span>
+                <button class="deck-nav-btn" id="nextBtn" onclick="nextPage()">下一页 →</button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ── Web Deck Runtime ──
+        const totalPages = 13;
+        let currentPage = 0;
+        const viewport = document.getElementById('viewport');
+        const pages = viewport.querySelectorAll('.deck-page');
+        const tocItems = document.querySelectorAll('.deck-toc-item');
+        const progressBar = document.getElementById('progressBar');
+        const pageIndicator = document.getElementById('pageIndicator');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+
+        function goToPage(index) {
+            if (index < 0 || index >= totalPages) return;
+            currentPage = index;
+            pages[index].scrollIntoView({ behavior: 'smooth' });
+            updateUI();
+            if (history.replaceState) history.replaceState(null, '', '#page-' + (index + 1));
+        }
+
+        function nextPage() { goToPage(currentPage + 1); }
+        function prevPage() { goToPage(currentPage - 1); }
+
+        function updateUI() {
+            // 更新目录高亮
+            tocItems.forEach((item, i) => {
+                item.classList.toggle('active', i === currentPage);
+            });
+            // 更新进度条
+            const progress = ((currentPage + 1) / totalPages) * 100;
+            progressBar.style.width = progress + '%';
+            // 更新页码
+            pageIndicator.textContent = (currentPage + 1) + ' / ' + totalPages;
+            // 更新按钮状态
+            prevBtn.disabled = currentPage === 0;
+            nextBtn.disabled = currentPage === totalPages - 1;
+        }
+
+        // 滚动监听 — 自动更新当前页
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const index = Array.from(pages).indexOf(entry.target);
+                    if (index !== -1) {
+                        currentPage = index;
+                        updateUI();
+                    }
+                }
+            });
+        }, { root: viewport, threshold: 0.5 });
+
+        pages.forEach(page => observer.observe(page));
+
+        // 键盘导航
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextPage();
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevPage();
+            }
+        });
+
+        // 初始化 URL hash 路由
+        const hash = window.location.hash; if (hash && hash.startsWith('#page-')) { const n = parseInt(hash.slice(6)); if (n > 0 && n <= totalPages) goToPage(n - 1); }
+
+        // 初始化 UI
+        updateUI();
+    </script>
+</body>
+</html>

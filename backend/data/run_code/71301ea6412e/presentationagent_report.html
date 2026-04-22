@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PresentationAgent 技术分享报告</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', 'Microsoft YaHei', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+        .code-block { background: #1e1e1e; color: #d4d4d4; border-radius: 8px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
+        th { background: #f9fafb; font-weight: 600; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-16">
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="flex items-center gap-4 mb-4">
+                <span class="text-4xl">🎯</span>
+                <span class="text-xl font-medium opacity-90">技术分享报告</span>
+            </div>
+            <h1 class="text-4xl font-bold mb-4">PresentationAgent</h1>
+            <p class="text-xl opacity-90">AI 驱动的智能演示文稿生成平台</p>
+            <div class="flex gap-4 mt-6">
+                <span class="px-4 py-2 bg-white/20 rounded-full text-sm">FastAPI</span>
+                <span class="px-4 py-2 bg-white/20 rounded-full text-sm">Next.js 14</span>
+                <span class="px-4 py-2 bg-white/20 rounded-full text-sm">Agent Runtime</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-6 py-12">
+        <!-- 项目概述 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                <span class="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-lg">📋</span>
+                一、项目概述
+            </h2>
+            <div class="bg-white rounded-2xl p-8 shadow-sm">
+                <p class="text-gray-600 text-lg leading-relaxed mb-6">
+                    PresentationAgent 是一个基于 AI Agent 的智能演示文稿生成平台，通过 AI 技术自动化演示文稿的创建过程。用户只需提供主题或内容需求，系统即可自动完成从内容研究、逻辑组织到视觉呈现的全流程工作。
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div class="bg-gray-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">⚡</div>
+                        <div class="font-semibold text-gray-800">Frontend</div>
+                        <div class="text-sm text-gray-500">Next.js 14 + React</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">🔧</div>
+                        <div class="font-semibold text-gray-800">Backend</div>
+                        <div class="text-sm text-gray-500">FastAPI + AIO</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">🤖</div>
+                        <div class="font-semibold text-gray-800">LLM Layer</div>
+                        <div class="text-sm text-gray-500">litellm 多模型</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">⚙️</div>
+                        <div class="font-semibold text-gray-800">Runtime</div>
+                        <div class="text-sm text-gray-500">MiddlewareChain</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">📊</div>
+                        <div class="font-semibold text-gray-800">Renderer</div>
+                        <div class="text-sm text-gray-500">PPTXGENJS</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 核心架构 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                <span class="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-lg">🏗️</span>
+                二、核心架构（AgentFactory + AgentRunner + MiddlewareChain）
+            </h2>
+            
+            <!-- AgentFactory -->
+            <div class="bg-white rounded-2xl p-8 shadow-sm mb-6 card-hover transition-all duration-300">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">2.1 AgentFactory (Agent 工厂)</h3>
+                <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                    <code class="text-sm text-gray-600">文件：backend/app/core/agent_factory.py</code>
+                </div>
+                <p class="text-gray-600 mb-4">职责：动态构建 AgentContext + MiddlewareChain</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-indigo-50 rounded-xl p-4">
+                        <div class="font-semibold text-indigo-800 mb-2">create()</div>
+                        <div class="text-sm text-gray-600">创建 AgentContext 和 MiddlewareChain</div>
+                    </div>
+                    <div class="bg-indigo-50 rounded-xl p-4">
+                        <div class="font-semibold text-indigo-800 mb-2">_build_chain()</div>
+                        <div class="text-sm text-gray-600">根据意图组装中间件链</div>
+                    </div>
+                    <div class="bg-indigo-50 rounded-xl p-4">
+                        <div class="font-semibold text-indigo-800 mb-2">create_subagent()</div>
+                        <div class="text-sm text-gray-600">创建子 Agent</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AgentRunner -->
+            <div class="bg-white rounded-2xl p-8 shadow-sm mb-6 card-hover transition-all duration-300">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">2.2 AgentRunner (Agent 运行器)</h3>
+                <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                    <code class="text-sm text-gray-600">文件：backend/app/core/agent_runner.py</code>
+                </div>
+                <p class="text-gray-600 mb-4">职责：执行 Agent 主循环</p>
+                <div class="bg-slate-900 rounded-xl p-6 text-white font-mono text-sm">
+                    <div class="mb-2 text-gray-400">// 核心流程</div>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-blue-600 px-3 py-1 rounded">消息持久化</span>
+                        <span class="text-gray-500">→</span>
+                        <span class="bg-purple-600 px-3 py-1 rounded">on_request_start</span>
+                        <span class="text-gray-500">→</span>
+                        <span class="bg-green-600 px-3 py-1 rounded">组装上下文</span>
+                        <span class="text-gray-500">→</span>
+                        <span class="bg-orange-600 px-3 py-1 rounded">主循环</span>
+                        <span class="text-gray-500">→</span>
+                        <span class="bg-red-600 px-3 py-1 rounded">on_request_end</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MiddlewareChain -->
+            <div class="bg-white rounded-2xl p-8 shadow-sm mb-6 card-hover transition-all duration-300">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">2.3 MiddlewareChain (中间件链)</h3>
+                <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                    <code class="text-sm text-gray-600">文件：backend/app/core/agent_middleware.py</code>
+                    <p class="text-sm text-gray-500 mt-1">设计模式：洋葱模型（正序执行 before，反序执行 after）</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>钩子</th>
+                                <th>触发时机</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>on_request_start</td><td>请求开始前</td></tr>
+                            <tr><td>on_before_llm</td><td>每轮 LLM 调用前</td></tr>
+                            <tr><td>on_after_llm</td><td>每轮 LLM 响应后</td></tr>
+                            <tr><td>on_tool_start</td><td>每次工具调用前</td></tr>
+                            <tr><td>on_tool_end</td><td>每次工具调用后</td></tr>
+                            <tr><td>on_round_end</td><td>每轮结束后</td></tr>
+                            <tr><td>on_request_end</td><td>请求完全结束后</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 工具分发 -->
+            <div class="bg-white rounded-2xl p-8 shadow-sm card-hover transition-all duration-300">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">2.4 工具分发机制 & 上下文管理</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                            <code class="text-sm text-gray-600">文件：tool_dispatch.py</code>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">dispatch()</span>
+                                <span class="text-gray-600 text-sm">执行工具</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">filter_tools_by_intent()</span>
+                                <span class="text-gray-600 text-sm">按意图过滤工具</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">load_skill()</span>
+                                <span class="text-gray-600 text-sm">动态加载 Skill</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                            <code class="text-sm text-gray-600">文件：context_service.py</code>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs">assemble_context()</span>
+                                <span class="text-gray-600 text-sm">组装上下文</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs">compress_context()</span>
+                                <span class="text-gray-600 text-sm">压缩长对话</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs">128K tokens</span>
+                                <span class="text-gray-600 text-sm">默认上下文窗口</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 管理功能 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                <span class="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-lg">⚡</span>
+                三、管理功能
+            </h2>
+
+            <!-- Skill 系统 -->
+            <div class="bg-white rounded-2xl p-8 shadow-sm mb-6 card-hover transition-all duration-300">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">3.1 Skill 系统</h3>
+                <div class="bg-gray-50 rounded-xl p-4 mb-4">
+                    <code class="text-sm text-gray-600">文件：backend/app/services/skill_service.py</code>
+                    <p class="text-sm text-gray-500 mt-1">系统预置 20+ 专业 Skills</p>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">📊</div>
+                        <div class="font-medium text-sm">PPTX 编辑专家</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">📄</div>
+                        <div class="font-medium text-sm">DOCX 编辑专家</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">🔍</div>
+                        <div class="font-medium text-sm">研究分析师</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">🐛</div>
+                        <div class="font-medium text-sm">代码审查专家</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">📈</div>
+                        <div class="font-medium text-sm">数据分析师</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-pink-50 to-pink-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">✍️</div>
+                        <div class="font-medium text-sm">写作教练</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">🎯</div>
+                        <div class="font-medium text-sm">会议主持人</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-xl p-3">
+                        <div class="text-lg mb-1">🎨</div>
+                        <div class="font-medium text-sm">前端美学专家</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 记忆系统 -->
+            <div class="bg-white rounded-2xl p-8 shadow-sm mb-6 card-hover transition-all duration-300">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">3.2 记忆系统</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-blue-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">💡</div>
+                        <div class="font-semibold text-blue-800">preference</div>
+                        <div class="text-sm text-gray-600">用户偏好</div>
+                    </div>
+                    <div class="bg-green-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">📝</div>
+                        <div class="font-semibold text-green-800">fact</div>
+                        <div class="text-sm text-gray-600">事实信息</div>
+                    </div>
+                    <div class="bg-orange-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">📋</div>
+                        <div class="font-semibold text-orange-800">instruction</div>
+                        <div class="text-sm text-gray-600">指令记录</div>
+                    </div>
+                    <div class="bg-purple-50 rounded-xl p-4 text-center">
+                        <div class="text-2xl mb-2">💬</div>
+                        <div class="font-semibold text-purple-800">feedback</div>
+                        <div class="text-sm text-gray-600">反馈信息</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <span class="bg-gray-100 px-3 py-1 rounded-full text-sm text-gray-700">用户画像构建</span>
+                    <span class="bg-gray-100 px-3 py-1 rounded-full text-sm text-gray-700">上下文自动注入</span>
+                    <span class="bg-gray-100 px-3 py-1 rounded-full text-sm text-gray-700">个性化服务</span>
+                </div>
+            </div>
+
+            <!-- 多会话管理 -->
+            <div class="bg-white rounded-2xl p-8 shadow-sm card-hover transition-all duration-300">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">3.3 多会话管理</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white">
+                        <div class="text-3xl mb-4">🔒</div>
+                        <h4 class="text-lg font-bold mb-2">会话隔离</h4>
+                        <ul class="text-sm space-y-2 opacity-90">
+                            <li>• 每个用户会话独立存储</li>
+                            <li>• Session 级别 AgentContext</li>
+                            <li>• 记忆按用户/会话分级</li>
+                            <li>• 保障用户隐私安全</li>
+                        </ul>
+                    </div>
+                    <div class="bg-gradient-to-br from-green-500 to-teal-600 rounded-2xl p-6 text-white">
+                        <div class="text-3xl mb-4">⚡</div>
+                        <h4 class="text-lg font-bold mb-2">任务并行</h4>
+                        <ul class="text-sm space-y-2 opacity-90">
+                            <li>• WebSocket 异步调度</li>
+                            <li>• 独立 asyncio.Task 运行</li>
+                            <li>• 多任务同时执行</li>
+                            <li>• 状态实时追踪</li>
+                        </ul>
+                    </div>
+                    <div class="bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl p-6 text-white">
+                        <div class="text-3xl mb-4">🎛️</div>
+                        <h4 class="text-lg font-bold mb-2">并发控制</h4>
+                        <ul class="text-sm space-y-2 opacity-90">
+                            <li>• MAX_TOOL_ROUNDS 限制</li>
+                            <li>• Token Budget 监控</li>
+                            <li>• 子 Agent 数量限制</li>
+                            <li>• 系统稳定性保障</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 智能工作区 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                <span class="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-lg">🚀</span>
+                四、智能工作区（四大核心能力）
+            </h2>
+
+            <!-- WebDeck -->
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-6">
+                <div class="flex items-center gap-4 mb-4">
+                    <span class="text-4xl">📊</span>
+                    <div>
+                        <h3 class="text-2xl font-bold">WebDeck（PPT 演示文稿）</h3>
+                        <p class="opacity-80">自研 Native Renderer PPTX 生成器</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div>
+                        <h4 class="font-semibold mb-3">核心特性</h4>
+                        <ul class="space-y-2 text-sm opacity-90">
+                            <li>✓ WebSocket 实时通信，流式输出</li>
+                            <li>✓ 状态管理：pending → generating → completed/failed</li>
+                            <li>✓ Director-Planner-Scheduler-Reviewer 四角色协同</li>
+                            <li>✓ 支持导出为可编辑 PPTX 格式</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold mb-3">支持主题</h4>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">tech_dark</span>
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">ocean_gradient</span>
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">warm_sunset</span>
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">forest_green</span>
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">royal_purple</span>
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">minimal_gray</span>
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">coral_energy</span>
+                            <span class="bg-white/20 px-2 py-1 rounded text-xs">classic_blue</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 其他三大能力 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white rounded-2xl p-6 shadow-sm card-hover transition-all duration-300">
+                    <div class="text-3xl mb-4">📐</div>
+                    <h4 class="text-lg font-bold text-gray-800 mb-2">Drawio 流程图</h4>
+                    <p class="text-gray-600 text-sm mb-4">生成 draw.io 兼容的流程图/架构图</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">Flowchart</span>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">UML</span>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">数据流图</span>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">XML 格式</span>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm card-hover transition-all duration-300">
+                    <div class="text-3xl mb-4">🌐</div>
+                    <h4 class="text-lg font-bold text-gray-800 mb-2">Web 页面生成</h4>
+                    <p class="text-gray-600 text-sm mb-4">HTML 网页/应用可视化生成</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">响应式布局</span>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">表格/卡片</span>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">图表</span>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm card-hover transition-all duration-300">
+                    <div class="text-3xl mb-4">📝</div>
+                    <h4 class="text-lg font-bold text-gray-800 mb-2">智能文档</h4>
+                    <p class="text-gray-600 text-sm mb-4">Markdown 文档研究报告输出</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">Markdown</span>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">研究报告</span>
+                        <span class="bg-gray-100 px-2 py-1 rounded text-xs">技术文档</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 前端架构 -->
+        <section class="mb-16">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-3">
+                <span class="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-lg">💻</span>
+                五、前端架构
+            </h2>
+
+            <div class="bg-white rounded-2xl p-8 shadow-sm mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">技术栈</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center gap-3">
+                                <span class="w-10 h-10 bg-black text-white rounded-lg flex items-center justify-center text-xs font-bold">NX</span>
+                                <div>
+                                    <div class="font-medium">Next.js 14</div>
+                                    <div class="text-sm text-gray-500">App Router</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-10 h-10 bg-cyan-500 text-white rounded-lg flex items-center justify-center text-xs font-bold">R</span>
+                                <div>
+                                    <div class="font-medium">React 18 + TypeScript</div>
+                                    <div class="text-sm text-gray-500">类型安全</div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-10 h-10 bg-sky-500 text-white rounded-lg flex items-center justify-center text-xs font-bold">TW</span>
+                                <div>
+                                    <div class="font-medium">Tailwind CSS</div>
+                                    <div class="text-sm text-gray-500">原子化样式</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">状态管理</h3>
+                        <div class="space-y-3">
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <div class="font-medium text-purple-800">ChatStore</div>
+                                <div class="text-sm text-gray-600">对话历史和流式内容</div>
+                            </div>
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <div class="font-medium text-blue-800">DeckStore</div>
+                                <div class="text-sm text-gray-600">WebDeck 项目状态</div>
+                            </div>
+                            <div class="bg-gray-50 rounded-xl p-3">
+                                <div class="font-medium text-green-800">useWebSocket</div>
+                                <div class="text-sm text-gray-600">全局单例 WebSocket</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl p-8 shadow-sm">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">AI 能力入口</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl p-4">
+                        <div class="text-2xl mb-2">📊</div>
+                        <div class="font-medium">AI PPT 生成</div>
+                        <div class="text-xs text-gray-600 mt-1">智能演示文稿创建</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl p-4">
+                        <div class="text-2xl mb-2">📋</div>
+                        <div class="font-medium">调研报告</div>
+                        <div class="text-xs text-gray-600 mt-1">深度调研与报告</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-purple-50 to-violet-100 rounded-xl p-4">
+                        <div class="text-2xl mb-2">🔍</div>
+                        <div class="font-medium">深度研究</div>
+                        <div class="text-xs text-gray-600 mt-1">多维度信息研究</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-orange-50 to-amber-100 rounded-xl p-4">
+                        <div class="text-2xl mb-2">🌐</div>
+                        <div class="font-medium">网页搜索</div>
+                        <div class="text-xs text-gray-600 mt-1">互联网信息检索</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-red-50 to-rose-100 rounded-xl p-4">
+                        <div class="text-2xl mb-2">💻</div>
+                        <div class="font-medium">代码分析</div>
+                        <div class="text-xs text-gray-600 mt-1">代码质量与安全</div>
+                    </div>
+                    <div class="bg-gradient-to-br from-pink-50 to-rose-100 rounded-xl p-4">
+                        <div class="text-2xl mb-2">✍️</div>
+                        <div class="font-medium">文案撰写</div>
+                        <div class="text-xs text-gray-600 mt-1">专业文案生成</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 总结 -->
+        <section class="mb-8">
+            <div class="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-8 text-white">
+                <h2 class="text-2xl font-bold mb-4">六、总结</h2>
+                <p class="text-gray-300 leading-relaxed">
+                    PresentationAgent 通过 <strong class="text-white">AgentFactory + AgentRunner + MiddlewareChain</strong> 的核心架构，实现了灵活的 AI Agent 运行时系统。配合完善的 <strong class="text-white">Skill 系统</strong>、<strong class="text-white">记忆系统</strong> 和 <strong class="text-white">多会话管理</strong>，支持 <strong class="text-white">WebDeck</strong>、<strong class="text-white">Drawio</strong>、<strong class="text-white">Web 页面</strong>、<strong class="text-white">智能文档</strong> 四大核心输出能力，为技术团队提供了一站式智能演示文稿生成解决方案。
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-gray-100 py-8 mt-16">
+        <div class="max-w-6xl mx-auto px-6 text-center text-gray-500 text-sm">
+            PresentationAgent 技术分享报告 | 基于 AI Agent 的智能演示文稿生成平台
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "generalagent-native-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.mjs",
+    "start": "node src/server.mjs",
+    "smoke": "node scripts/smoke-render.mjs"
+  },
+  "dependencies": {
+    "express": "4.21.2",
+    "jszip": "3.10.1",
+    "pptxgenjs": "3.12.0"
+  }
+}

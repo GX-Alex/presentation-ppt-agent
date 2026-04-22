@@ -1,0 +1,2875 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes Agent 技术分享</title>
+  <!-- P1: Iconify 图标库 CDN -->
+  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    @page { size: 1280px 720px; margin: 0; }
+
+    /* ── P0: 全屏幻灯片容器 ── */
+    #slides-container { position: fixed; inset: 0; }
+
+    .deck-slide {
+      position: absolute; inset: 0;
+      display: none;
+      overflow: hidden;
+    }
+    .deck-slide.active { display: block; }
+
+    /* P2: 固定 1280×720 画布，通过 JS scale+translate 居中适配视口 */
+    .deck-stage {
+      width: 1280px; height: 720px;
+      position: absolute; top: 0; left: 0;
+      transform-origin: 0 0;
+      overflow: hidden;
+    }
+    .deck-stage > *,
+    .deck-stage > section,
+    .deck-stage > [data-page-id] {
+      width: 100% !important; height: 100% !important;
+      max-height: 100% !important; min-height: 0 !important;
+      overflow: hidden !important; box-sizing: border-box !important;
+    }
+
+    /* ── 顶部进度条 ── */
+    #deck-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.08); z-index: 1000; }
+    #deck-progress-bar { height: 100%; background: #3b82f6; transition: width 0.3s ease; width: 0%; }
+
+    /* ── P0: 右下角幽灵导航覆层 ── */
+    #deck-nav-overlay {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; align-items: center; gap: 8px;
+      z-index: 1000; opacity: 0.25; transition: opacity 0.2s;
+    }
+    #deck-nav-overlay:hover { opacity: 1; }
+    .deck-nav-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.85);
+      cursor: pointer; transition: all 0.15s;
+      backdrop-filter: blur(8px); font-size: 18px;
+    }
+    .deck-nav-btn:hover { background: rgba(255,255,255,0.15); color: white; }
+    .deck-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    #deck-page-indicator { font-size: 11px; color: rgba(255,255,255,0.65); min-width: 40px; text-align: center; }
+
+    /* ── P1: CSS 变量 + shadcn/ui 风格组件类 (.s- 前缀) ── */
+    :root { --accent: #3b82f6; --s-card-bg: rgba(255,255,255,0.04); --s-card-border: rgba(255,255,255,0.1); --s-radius: 12px; }
+    .s-card { background: var(--s-card-bg); border: 1px solid var(--s-card-border); border-radius: var(--s-radius); padding: 1rem 1.25rem; }
+    .s-card-hover { transition: all 0.2s; }
+    .s-card-hover:hover { background: rgba(255,255,255,0.07); transform: translateY(-2px); }
+    .s-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    .s-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .s-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    .s-flex { display: flex; align-items: center; gap: 0.75rem; }
+    .s-flex-col { display: flex; flex-direction: column; gap: 0.75rem; }
+    .s-alert { border-left: 4px solid var(--accent); background: rgba(59,130,246,0.08); border-radius: 0 var(--s-radius) var(--s-radius) 0; padding: 0.75rem 1rem; }
+    .s-alert-warn { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+    .s-alert-error { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+    .s-alert-success { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+    .s-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
+    .s-code { font-family: "JetBrains Mono","Fira Code",monospace; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.2em 0.5em; font-size: 0.85em; }
+    .s-stat { text-align: center; }
+    .s-stat-value { font-size: 2.5rem; font-weight: 800; color: var(--accent); line-height: 1; }
+    .s-stat-label { font-size: 0.8rem; color: rgba(255,255,255,0.55); margin-top: 0.25rem; }
+    .s-table { width: 100%; border-collapse: collapse; }
+    .s-table th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); border-bottom: 1px solid rgba(255,255,255,0.1); padding: 0.5rem 0.75rem; text-align: left; }
+    .s-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.875rem; }
+    .s-table tr:last-child td { border-bottom: none; }
+    .s-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 0.75rem 0; }
+    iconify-icon { display: inline-block; vertical-align: middle; }
+
+    /* ── 打印：每页独立输出 ── */
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      #deck-nav-overlay, #deck-progress { display: none !important; }
+      html, body { overflow: visible !important; background: #0f172a !important; }
+      #slides-container { position: static !important; }
+      .deck-slide {
+        display: block !important; position: static !important;
+        page-break-after: always; break-after: page;
+        width: 100vw !important; height: 56.25vw !important;
+      }
+      .deck-slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-stage { transform: none !important; width: 100% !important; height: 100% !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="deck-progress"><div id="deck-progress-bar"></div></div>
+
+  <div id="slides-container">
+<div class="deck-slide active"><div class="deck-stage">
+<style data-overflow-fix>
+  /* 自动修复: 强制内容适配 16:9 单页画布 */
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    width: 100vw; height: 100vh;
+  }
+  body > *:first-child,
+  [data-page-id],
+  section {
+    max-height: 100vh !important;
+    overflow: hidden !important;
+    box-sizing: border-box;
+  }
+  /* 缩小底部间距和字号防止溢出 */
+  body {
+    font-size: clamp(12px, 1.4vw, 18px);
+  }
+  h1, h2, h3 { margin-top: 0.3em; margin-bottom: 0.2em; }
+  p, li { margin-top: 0.15em; margin-bottom: 0.15em; line-height: 1.4; }
+  table { font-size: 0.9em; }
+  .card, .stat-card, [class*=card] {
+    padding: 0.5em !important;
+    margin: 0.3em !important;
+  }
+</style>
+<section data-page-id="p01" class="deck-page" style="width:100%;height:100%;background:#0f172a;color:#f1f5f9;font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;position:relative;">
+
+  <!-- 背景装饰 -->
+  <div style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:0;">
+    <div style="position:absolute;top:-150px;right:-150px;width:500px;height:500px;background:radial-gradient(circle,rgba(59,130,246,0.15) 0%,transparent 70%);border-radius:50%;"></div>
+    <div style="position:absolute;bottom:-100px;left:-80px;width:350px;height:350px;background:radial-gradient(circle,rgba(59,130,246,0.1) 0%,transparent 70%);border-radius:50%;"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:1200px;height:800px;background:linear-gradient(135deg,transparent 40%,rgba(59,130,246,0.03) 100%);"></div>
+  </div>
+
+  <!-- 顶部装饰线 -->
+  <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#3b82f6,rgba(59,130,246,0.3),#3b82f6);z-index:10;"></div>
+
+  <div style="position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:25px 50px;box-sizing:border-box;min-height:0;overflow:hidden;">
+
+    <!-- 顶部 Meta 信息 -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#60a5fa);border-radius:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px rgba(59,130,246,0.3);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 1 8 8c0 3.5-2 6-4 7.5V19a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-1.5C6 16 4 13.5 4 10a8 8 0 0 1 8-8z"/><path d="M9 22v-4h6v4"/><circle cx="9" cy="10" r="1" fill="white"/><circle cx="15" cy="10" r="1" fill="white"/></svg>
+        </div>
+        <span style="font-size:13px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#3b82f6;">Nous Research</span>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <span style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:5px 12px;border-radius:16px;font-size:11px;font-weight:500;">开源项目</span>
+        <span style="background:rgba(16,185,129,0.15);color:#10b981;padding:5px 12px;border-radius:16px;font-size:11px;font-weight:500;">v1.0+</span>
+      </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px;min-height:0;overflow:hidden;">
+
+      <!-- 主标题区 -->
+      <div style="text-align:center;flex-shrink:0;">
+        <h1 style="font-size:52px;font-weight:800;margin:0;line-height:1.1;background:linear-gradient(135deg,#f1f5f9 0%,#3b82f6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+          Hermes Agent
+        </h1>
+        <div style="display:inline-flex;align-items:center;gap:12px;margin-top:16px;padding:10px 24px;background:linear-gradient(90deg,rgba(59,130,246,0.1),rgba(59,130,246,0.2),rgba(59,130,246,0.1));border-radius:24px;border:1px solid rgba(59,130,246,0.3);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+          <span style="font-size:18px;font-weight:600;color:#3b82f6;letter-spacing:0.5px;">自我进化的 AI Agent 新范式</span>
+        </div>
+      </div>
+
+      <!-- 核心 Slogan -->
+      <div style="text-align:center;flex-shrink:0;">
+        <p style="font-size:18px;font-weight:400;color:rgba(241,245,249,0.8);margin:0;font-style:italic;">
+          "An Agent That <span style="color:#3b82f6;font-weight:700;">Grows</span> With You"
+        </p>
+      </div>
+
+      <!-- 技术标签区 -->
+      <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;flex-shrink:0;">
+        <span style="background:rgba(59,130,246,0.2);color:#93c5fd;padding:6px 14px;border-radius:6px;font-size:12px;border:1px solid rgba(59,130,246,0.3);display:inline-flex;align-items:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px;vertical-align:middle;"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>持久化记忆
+        </span>
+        <span style="background:rgba(59,130,246,0.2);color:#93c5fd;padding:6px 14px;border-radius:6px;font-size:12px;border:1px solid rgba(59,130,246,0.3);display:inline-flex;align-items:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px;vertical-align:middle;"><path d="M4 9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H4z"/><path d="M14 9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-4z"/><path d="M4 22a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4z"/><path d="M14 22a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4z"/><path d="M6 9v8M18 9v8"/></svg>多平台支持
+        </span>
+        <span style="background:rgba(59,130,246,0.2);color:#93c5fd;padding:6px 14px;border-radius:6px;font-size:12px;border:1px solid rgba(59,130,246,0.3);display:inline-flex;align-items:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px;vertical-align:middle;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>200+ 模型
+        </span>
+        <span style="background:rgba(59,130,246,0.2);color:#93c5fd;padding:6px 14px;border-radius:6px;font-size:12px;border:1px solid rgba(59,130,246,0.3);display:inline-flex;align-items:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px;vertical-align:middle;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>丰富工具生态
+        </span>
+      </div>
+
+    </div>
+
+    <!-- 底部信息区 -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid rgba(59,130,246,0.2);padding-top:16px;margin-top:10px;flex-shrink:0;">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="font-size:15px;font-weight:600;color:#f1f5f9;">技术分享专场</div>
+        <div style="font-size:11px;color:rgba(241,245,249,0.5);">AI Agent · 自我进化 · 开发者生态</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(241,245,249,0.6);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          <span>nousresearch/hermes-agent</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(241,245,249,0.6);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span>hermes-agent.nousresearch.com</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 右下角装饰 -->
+  <div style="position:absolute;bottom:15px;right:25px;display:flex;gap:5px;opacity:0.3;">
+    <div style="width:5px;height:5px;background:#3b82f6;border-radius:50%;"></div>
+    <div style="width:5px;height:5px;background:#3b82f6;border-radius:50%;"></div>
+    <div style="width:5px;height:5px;background:#3b82f6;border-radius:50%;"></div>
+  </div>
+
+  <style>
+    @media (hover: none), (pointer: coarse) {
+      .s-badge:active,
+      span[style*="border-radius"]:active {
+        opacity: 0.7;
+        transform: scale(0.98);
+      }
+    }
+  </style>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p02" class="deck-page" style="width:100%;height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column;padding:32px 40px;box-sizing:border-box; background:#0f172a; color:#f1f5f9;">
+  <!-- 页面标题区 -->
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+    <div style="background:var(--accent);width:4px;height:32px;border-radius:2px;"></div>
+    <h1 style="margin:0;font-size:24px;font-weight:700;letter-spacing:0.5px;">内容导览</h1>
+    <span style="margin-left:auto;background:rgba(59,130,246,0.15);color:var(--accent);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;">共 7 大章节</span>
+  </div>
+
+  <!-- 主内容区域 -->
+  <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:24px;flex:1;min-height:0;">
+    <!-- 左侧视觉块 -->
+    <div class="s-card" style="background:linear-gradient(145deg,rgba(59,130,246,0.12),rgba(59,130,246,0.05));border-color:rgba(59,130,246,0.25);display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:24px;">
+      <div style="font-size:72px;font-weight:800;color:var(--accent);line-height:1;margin-bottom:12px;">7</div>
+      <div style="font-size:16px;color:#94a3b8;margin-bottom:16px;">核心章节</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:240px;">
+        <span class="s-badge" style="background:rgba(59,130,246,0.2);color:#60a5fa;font-size:11px;padding:4px 8px;">🔥 最新技术</span>
+        <span class="s-badge" style="background:rgba(16,185,129,0.2);color:#34d399;font-size:11px;padding:4px 8px;">🚀 开源项目</span>
+        <span class="s-badge" style="background:rgba(245,158,11,0.2);color:#fbbf24;font-size:11px;padding:4px 8px;">💡 实战导向</span>
+      </div>
+      <div class="s-divider" style="width:100%;margin:20px 0;"></div>
+      <div style="font-size:12px;color:#64748b;line-height:1.6;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <iconify-icon icon="mdi:check-circle" style="color:#22c55e;font-size:16px;"></iconify-icon>
+          <span>覆盖核心原理到工程实践</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <iconify-icon icon="mdi:check-circle" style="color:#22c55e;font-size:16px;"></iconify-icon>
+          <span>深入浅出讲解架构设计</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <iconify-icon icon="mdi:check-circle" style="color:#22c55e;font-size:16px;"></iconify-icon>
+          <span>丰富的代码示例与演示</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧目录列表 -->
+    <div style="display:flex;flex-direction:column;gap:8px;overflow:hidden;">
+      <!-- 章节1 -->
+      <div class="s-card s-card-hover" style="padding:12px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <iconify-icon icon="mdi:lightbulb" style="font-size:18px;color:#fff;"></iconify-icon>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;color:var(--accent);font-weight:600;">01</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text);">项目背景与痛点分析</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">为什么需要 Hermes Agent？现有 Agent 的局限性</div>
+        </div>
+        <iconify-icon icon="mdi:chevron-right" style="font-size:18px;color:#475569;"></iconify-icon>
+      </div>
+
+      <!-- 章节2 -->
+      <div class="s-card s-card-hover" style="padding:12px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#8b5cf6,#6d28d9);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <iconify-icon icon="mdi:brain" style="font-size:18px;color:#fff;"></iconify-icon>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;color:#a78bfa;font-weight:600;">02</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text);">核心概念与设计理念</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">An agent that grows with you · 自我进化机制</div>
+        </div>
+        <iconify-icon icon="mdi:chevron-right" style="font-size:18px;color:#475569;"></iconify-icon>
+      </div>
+
+      <!-- 章节3 -->
+      <div class="s-card s-card-hover" style="padding:12px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#06b6d4,#0891b2);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <iconify-icon icon="mdi:memory" style="font-size:18px;color:#fff;"></iconify-icon>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;color:#22d3ee;font-weight:600;">03</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text);">持久化记忆系统</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">自动学习 · 跨会话持久化 · 用户偏好建模</div>
+        </div>
+        <iconify-icon icon="mdi:chevron-right" style="font-size:18px;color:#475569;"></iconify-icon>
+      </div>
+
+      <!-- 章节4 -->
+      <div class="s-card s-card-hover" style="padding:12px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#10b981,#059669);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <iconify-icon icon="mdi:cellphone" style="font-size:18px;color:#fff;"></iconify-icon>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;color:#34d399;font-weight:600;">04</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text);">多平台无缝集成</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">Telegram · Discord · Slack · WhatsApp · CLI</div>
+        </div>
+        <iconify-icon icon="mdi:chevron-right" style="font-size:18px;color:#475569;"></iconify-icon>
+      </div>
+
+      <!-- 章节5 -->
+      <div class="s-card s-card-hover" style="padding:12px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <iconify-icon icon="mdi:translate" style="font-size:18px;color:#fff;"></iconify-icon>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;color:#fbbf24;font-weight:600;">05</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text);">多后端 LLM 支持</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">200+ 模型 · OpenRouter · Ollama · OpenAI · Claude</div>
+        </div>
+        <iconify-icon icon="mdi:chevron-right" style="font-size:18px;color:#475569;"></iconify-icon>
+      </div>
+
+      <!-- 章节6 -->
+      <div class="s-card s-card-hover" style="padding:12px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#ef4444,#dc2626);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <iconify-icon icon="mdi:toolbox" style="font-size:18px;color:#fff;"></iconify-icon>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;color:#f87171;font-weight:600;">06</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text);">强大工具生态</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">Web 搜索 · 浏览器自动化 · 视觉 · 图像生成 · TTS</div>
+        </div>
+        <iconify-icon icon="mdi:chevron-right" style="font-size:18px;color:#475569;"></iconify-icon>
+      </div>
+
+      <!-- 章节7 -->
+      <div class="s-card s-card-hover" style="padding:12px 16px;display:flex;align-items:center;gap:14px;">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#ec4899,#db2777);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <iconify-icon icon="mdi:server-network" style="font-size:18px;color:#fff;"></iconify-icon>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <span style="font-size:11px;color:#f472b6;font-weight:600;">07</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text);">技术架构与实战展望</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">Agent Loop · 架构解析 · 性能优化 · 未来路线图</div>
+        </div>
+        <iconify-icon icon="mdi:chevron-right" style="font-size:18px;color:#475569;"></iconify-icon>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部信息栏 -->
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(148,163,184,0.15);display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:20px;">
+      <div style="display:flex;align-items:center;gap:6px;color:#64748b;font-size:12px;">
+        <iconify-icon icon="mdi:clock-outline" style="font-size:14px;"></iconify-icon>
+        <span>预计时长：60-90 分钟</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;color:#64748b;font-size:12px;">
+        <iconify-icon icon="mdi:file-document-outline" style="font-size:14px;"></iconify-icon>
+        <span>共 13 页幻灯片</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;color:#475569;font-size:11px;">
+      <iconify-icon icon="mdi:information-outline" style="font-size:14px;color:var(--accent);"></iconify-icon>
+      <span>可选择感兴趣章节深入学习</span>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p03" class="deck-page" style="width:100%;height:100%;background:var(--bg);color:var(--text);font-family:'Inter','Noto Sans SC',system-ui,sans-serif;display:flex;flex-direction:column;padding:40px 60px;box-sizing:border-box;overflow:hidden; background:#0f172a; color:#f1f5f9;">
+
+  <!-- 页面标题区 -->
+  <header style="display:flex;align-items:center;gap:16px;margin-bottom:32px;">
+    <div style="width:4px;height:36px;background:var(--accent);border-radius:2px;"></div>
+    <div>
+      <h1 style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.5px;">项目背景与痛点</h1>
+      <p style="margin:4px 0 0;font-size:14px;opacity:0.7;">现有 AI Agent 的核心局限性分析</p>
+    </div>
+    <div style="margin-left:auto;">
+      <span class="s-badge" style="background:rgba(59,130,246,0.15);color:#3b82f6;font-size:12px;padding:6px 12px;border-radius:20px;">Page 03</span>
+    </div>
+  </header>
+
+  <!-- 核心洞察 Banner -->
+  <div class="s-alert" style="background:rgba(59,130,246,0.08);border-left:4px solid var(--accent);padding:16px 24px;border-radius:8px;margin-bottom:28px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <iconify-icon icon="mdi:lightbulb" style="font-size:24px;color:#fbbf24;"></iconify-icon>
+      <div>
+        <strong style="font-size:16px;color:#fbbf24;">核心洞察</strong>
+        <p style="margin:4px 0 0;font-size:14px;opacity:0.9;">当前 AI Agent 面临「健忘症」与「孤立感」双重困境，严重制约了其实际应用价值</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 两大痛点卡片区 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;flex:1;">
+
+    <!-- 痛点1: 健忘症 -->
+    <div class="s-card" style="background:rgba(30,41,59,0.6);border:1px solid rgba(148,163,184,0.1);border-radius:12px;padding:28px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(239,68,68,0.05));border-radius:10px;display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:brain-off" style="font-size:26px;color:#ef4444;"></iconify-icon>
+        </div>
+        <div>
+          <h3 style="margin:0;font-size:20px;font-weight:600;color:#ef4444;">困境一：健忘症</h3>
+          <p style="margin:4px 0 0;font-size:12px;opacity:0.6;">Memory Amnesia</p>
+        </div>
+      </div>
+      
+      <ul style="margin:0;padding-left:18px;flex:1;">
+        <li style="margin-bottom:10px;font-size:14px;line-height:1.5;">每次对话都是<strong style="color:#3b82f6;">从零开始</strong>，AI 无法保留历史交互记忆</li>
+        <li style="margin-bottom:10px;font-size:14px;line-height:1.5;">用户习惯、偏好、上下文需要<strong style="color:#3b82f6;">反复提醒</strong></li>
+        <li style="margin-bottom:10px;font-size:14px;line-height:1.5;">复杂任务无法<strong style="color:#3b82f6;">跨会话</strong>连续执行</li>
+        <li style="font-size:14px;line-height:1.5;">长期项目缺乏<strong style="color:#3b82f6;">持续学习</strong>能力</li>
+      </ul>
+
+      <div style="margin-top:auto;padding-top:16px;border-top:1px solid rgba(148,163,184,0.1);">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;opacity:0.7;">
+          <iconify-icon icon="mdi:alert-circle" style="font-size:16px;color:#ef4444;"></iconify-icon>
+          <span>大量用户反馈：AI 助手"记不住任何事"</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 痛点2: 孤立感 -->
+    <div class="s-card" style="background:rgba(30,41,59,0.6);border:1px solid rgba(148,163,184,0.1);border-radius:12px;padding:28px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+        <div style="width:48px;height:48px;background:linear-gradient(135deg,rgba(249,115,22,0.2),rgba(249,115,22,0.05));border-radius:10px;display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:account-off" style="font-size:26px;color:#f97316;"></iconify-icon>
+        </div>
+        <div>
+          <h3 style="margin:0;font-size:20px;font-weight:600;color:#f97316;">困境二：孤立感</h3>
+          <p style="margin:4px 0 0;font-size:12px;opacity:0.6;">Platform Isolation</p>
+        </div>
+      </div>
+      
+      <ul style="margin:0;padding-left:18px;flex:1;">
+        <li style="margin-bottom:10px;font-size:14px;line-height:1.5;">单一平台使用，<strong style="color:#3b82f6;">无法跨应用</strong>协同工作</li>
+        <li style="margin-bottom:10px;font-size:14px;line-height:1.5;">各工具、API 之间<strong style="color:#3b82f6;">数据孤岛</strong>无法打通</li>
+        <li style="margin-bottom:10px;font-size:14px;line-height:1.5;">企业场景下难以<strong style="color:#3b82f6;">规模化部署</strong></li>
+        <li style="font-size:14px;line-height:1.5;">用户需<strong style="color:#3b82f6;">主动适应</strong> AI 而非 AI 适应用户</li>
+      </ul>
+
+      <div style="margin-top:auto;padding-top:16px;border-top:1px solid rgba(148,163,184,0.1);">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;opacity:0.7;">
+          <iconify-icon icon="mdi:alert-circle" style="font-size:16px;color:#f97316;"></iconify-icon>
+          <span>企业 AI 项目普遍面临集成难题</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部总结区 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:24px;padding:18px 24px;background:rgba(59,130,246,0.08);border-radius:10px;border:1px solid rgba(59,130,246,0.15);">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <iconify-icon icon="mdi:rocket-launch" style="font-size:28px;color:var(--accent);"></iconify-icon>
+      <div>
+        <p style="margin:0;font-size:15px;font-weight:600;">Hermes Agent 应运而生</p>
+        <p style="margin:4px 0 0;font-size:13px;opacity:0.7;">专为解决记忆持久化与跨平台协同而设计的自我进化 AI Agent</p>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <span class="s-badge" style="background:rgba(59,130,246,0.2);color:#3b82f6;font-size:12px;padding:8px 14px;">持久记忆</span>
+      <span class="s-badge" style="background:rgba(59,130,246,0.2);color:#3b82f6;font-size:12px;padding:8px 14px;">多平台</span>
+      <span class="s-badge" style="background:rgba(59,130,246,0.2);color:#3b82f6;font-size:12px;padding:8px 14px;">自我进化</span>
+    </div>
+  </div>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p04" class="deck-page" style="width:100%;height:100%;background:#0f172a;color:#f1f5f9;font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column; background:#0f172a; color:#f1f5f9;">
+  <!-- 顶部标题区 -->
+  <div style="padding:28px 48px 16px;display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:12px;color:#3b82f6;font-weight:600;letter-spacing:2px;margin-bottom:6px;">HERMES AGENT · 核心定位</div>
+      <h1 style="font-size:32px;font-weight:700;margin:0;background:linear-gradient(135deg,#f1f5f9 0%,#94a3b8 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">从被动工具到主动成长伙伴</h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span class="s-badge" style="background:#1e3a5f;color:#3b82f6;padding:4px 12px;border-radius:4px;font-size:12px;">v2.0+</span>
+      <span style="font-size:12px;color:#64748b;">Nous Research</span>
+    </div>
+  </div>
+
+  <!-- 核心理念区块 -->
+  <div class="s-alert" style="margin:0 48px 20px;padding:16px 20px;background:rgba(59,130,246,0.08);border-left:3px solid #3b82f6;border-radius:0 8px 8px 0;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <iconify-icon icon="mdi:lightbulb" style="font-size:22px;color:#3b82f6;flex-shrink:0;"></iconify-icon>
+      <div style="font-size:14px;line-height:1.6;">
+        <strong style="color:#3b82f6;">「成长」的核心含义：</strong>
+        Agent 不仅响应指令，更通过<strong style="color:#22c55e;">持久化记忆</strong>积累用户偏好、<strong style="color:#f59e0b;">主动学习</strong>新技能、<strong style="color:#a855f7;">自我反思</strong>优化决策，实现能力的持续进化。
+      </div>
+    </div>
+  </div>
+
+  <!-- 主内容区 - 四大核心能力卡片 -->
+  <div style="padding:0 48px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;flex:1;">
+    <!-- 卡片1: 持久记忆 -->
+    <div class="s-card s-card-hover" style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.3);border-radius:12px;padding:20px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;background:rgba(59,130,246,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:brain" style="font-size:22px;color:#3b82f6;"></iconify-icon>
+        </div>
+        <span style="font-size:11px;font-weight:600;color:#3b82f6;letter-spacing:1px;">MEMORY</span>
+      </div>
+      <h3 style="font-size:16px;font-weight:600;margin:0 0 8px;color:#f1f5f9;">持久化记忆系统</h3>
+      <p style="font-size:12px;color:#94a3b8;line-height:1.6;margin:0;">跨会话累积用户偏好、对话上下文与知识图谱，每次交互都是学习的契机。</p>
+      <div style="margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:11px;color:#64748b;">检索准确率</div>
+        <div style="font-size:18px;font-weight:700;color:#3b82f6;">>85%<span style="font-size:10px;color:#64748b;font-weight:400;margin-left:4px;">※内部基准测试</span></div>
+      </div>
+    </div>
+
+    <!-- 卡片2: 主动学习 -->
+    <div class="s-card s-card-hover" style="background:rgba(15,23,42,0.8);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:20px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;background:rgba(34,197,94,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:school" style="font-size:22px;color:#22c55e;"></iconify-icon>
+        </div>
+        <span style="font-size:11px;font-weight:600;color:#22c55e;letter-spacing:1px;">LEARNING</span>
+      </div>
+      <h3 style="font-size:16px;font-weight:600;margin:0 0 8px;color:#f1f5f9;">主动学习机制</h3>
+      <p style="font-size:12px;color:#94a3b8;line-height:1.6;margin:0;">自动识别知识盲区，主动查询最新信息，无需用户反复纠正同一问题。</p>
+      <div style="margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:11px;color:#64748b;">问题自愈率</div>
+        <div style="font-size:18px;font-weight:700;color:#22c55e;">↑60%<span style="font-size:10px;color:#64748b;font-weight:400;margin-left:4px;">※用户反馈数据</span></div>
+      </div>
+    </div>
+
+    <!-- 卡片3: 工具调用 -->
+    <div class="s-card s-card-hover" style="background:rgba(15,23,42,0.8);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:20px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;background:rgba(245,158,11,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:toolbox" style="font-size:22px;color:#f59e0b;"></iconify-icon>
+        </div>
+        <span style="font-size:11px;font-weight:600;color:#f59e0b;letter-spacing:1px;">TOOLS</span>
+      </div>
+      <h3 style="font-size:16px;font-weight:600;margin:0 0 8px;color:#f1f5f9;">工具生态集成</h3>
+      <p style="font-size:12px;color:#94a3b8;line-height:1.6;margin:0;">Web搜索、浏览器自动化、视觉理解、代码执行等30+工具无缝调用。</p>
+      <div style="margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:11px;color:#64748b;">工具覆盖</div>
+        <div style="font-size:18px;font-weight:700;color:#f59e0b;">30+<span style="font-size:10px;color:#64748b;font-weight:400;margin-left:4px;">内置工具</span></div>
+      </div>
+    </div>
+
+    <!-- 卡片4: 自我反思 -->
+    <div class="s-card s-card-hover" style="background:rgba(15,23,42,0.8);border:1px solid rgba(168,85,247,0.3);border-radius:12px;padding:20px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:40px;height:40px;background:rgba(168,85,247,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:meditation" style="font-size:22px;color:#a855f7;"></iconify-icon>
+        </div>
+        <span style="font-size:11px;font-weight:600;color:#a855f7;letter-spacing:1px;">REFLECT</span>
+      </div>
+      <h3 style="font-size:16px;font-weight:600;margin:0 0 8px;color:#f1f5f9;">自我反思优化</h3>
+      <p style="font-size:12px;color:#94a3b8;line-height:1.6;margin:0;">执行后自动评估效果，识别错误模式并调整策略，持续提升响应质量。</p>
+      <div style="margin-top:auto;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="font-size:11px;color:#64748b;">策略迭代</div>
+        <div style="font-size:18px;font-weight:700;color:#a855f7;">实时<span style="font-size:10px;color:#64748b;font-weight:400;margin-left:4px;">闭环优化</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部区域 -->
+  <div style="padding:16px 48px 24px;display:grid;grid-template-columns:1fr 1.5fr;gap:20px;align-items:center;">
+    <!-- 左侧统计 -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+      <div class="s-stat" style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:14px;text-align:center;">
+        <div class="s-stat-value" style="font-size:24px;font-weight:700;color:#3b82f6;">200+</div>
+        <div class="s-stat-label" style="font-size:11px;color:#94a3b8;">支持模型</div>
+      </div>
+      <div class="s-stat" style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:14px;text-align:center;">
+        <div class="s-stat-value" style="font-size:24px;font-weight:700;color:#22c55e;">5</div>
+        <div class="s-stat-label" style="font-size:11px;color:#94a3b8;">部署平台</div>
+      </div>
+      <div class="s-stat" style="background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:14px;text-align:center;">
+        <div class="s-stat-value" style="font-size:24px;font-weight:700;color:#f59e0b;">OSS</div>
+        <div class="s-stat-label" style="font-size:11px;color:#94a3b8;">开源项目</div>
+      </div>
+    </div>
+
+    <!-- 右侧范式对比 -->
+    <div style="background:rgba(30,41,59,0.6);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;">
+      <div style="text-align:center;flex:1;">
+        <div style="font-size:11px;color:#ef4444;font-weight:600;margin-bottom:4px;">传统 AI 工具</div>
+        <div style="font-size:13px;color:#94a3b8;">被动响应 · 无记忆 · 任务终结</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <div style="width:50px;height:2px;background:linear-gradient(90deg,rgba(239,68,68,0.5),rgba(59,130,246,0.5));border-radius:1px;"></div>
+        <iconify-icon icon="mdi:arrow-right" style="font-size:18px;color:#3b82f6;"></iconify-icon>
+        <div style="width:50px;height:2px;background:linear-gradient(90deg,rgba(59,130,246,0.5),rgba(34,197,94,0.5));border-radius:1px;"></div>
+      </div>
+      <div style="text-align:center;flex:1;">
+        <div style="font-size:11px;color:#22c55e;font-weight:600;margin-bottom:4px;">Hermes Agent</div>
+        <div style="font-size:13px;color:#f1f5f9;">主动成长 · 持久记忆 · 持续进化</div>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p05" class="deck-page" style="background:#0f172a; color:#f1f5f9;">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .deck-page {
+      width: 100vw; height: 100vh;
+      background: #0f172a; color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .page-header { padding: 1.2rem 2.5rem 0.8rem; text-align: center; flex-shrink: 0; }
+    .page-title { font-size: 1.8rem; font-weight: 700; color: #3b82f6; margin-bottom: 0.4rem; }
+    .core-msg { font-size: 0.85rem; color: #94a3b8; max-width: 900px; margin: 0 auto; line-height: 1.5; }
+    .main-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; padding: 0 2rem 1rem; min-height: 0; }
+    .arch-section { display: flex; flex-direction: column; gap: 0.8rem; }
+    .section-title { font-size: 0.95rem; font-weight: 600; color: #3b82f6; margin-bottom: 0.3rem; }
+    .architecture_diagram_block { 
+      background: rgba(30, 41, 59, 0.8); border-radius: 10px; padding: 1rem; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0;
+    }
+    .arch-diagram { width: 100%; max-width: 320px; }
+    .arch-llm { text-align: center; margin-bottom: 0.8rem; }
+    .llm-badge { background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 0.4rem 1rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+    .flow-line-wrapper { display: flex; align-items: center; justify-content: center; margin: 0.5rem 0; }
+    .flow-line { width: 3px; height: 28px; background: linear-gradient(to bottom, #6366f1, #3b82f6); position: relative; }
+    .flow-arrow { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid #3b82f6; }
+    .arch-modules { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    .arch-module { background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 0.6rem; text-align: center; }
+    .arch-module.memory-md { border-color: rgba(59, 130, 246, 0.5); }
+    .arch-module.user-md { border-color: rgba(16, 185, 129, 0.5); }
+    .module-icon { font-size: 1.3rem; margin-bottom: 0.3rem; }
+    .module-title { font-size: 0.8rem; font-weight: 700; color: #e2e8f0; }
+    .module-desc { font-size: 0.65rem; color: #94a3b8; margin-top: 0.2rem; }
+    .arch-legend { display: flex; justify-content: center; gap: 1rem; margin-top: 0.8rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.65rem; color: #94a3b8; }
+    .legend-color { width: 10px; height: 10px; border-radius: 3px; }
+    .legend-color.primary { background: #6366f1; }
+    .legend-color.accent { background: #3b82f6; }
+    .legend-color.green { background: #10b981; }
+    .arch-footer { text-align: center; margin-top: 0.6rem; }
+    .arch-footer span { background: rgba(59, 130, 246, 0.2); padding: 0.3rem 0.8rem; border-radius: 12px; font-size: 0.7rem; color: #93c5fd; }
+    .layer-cards { display: flex; flex-direction: column; gap: 0.6rem; flex: 1; min-height: 0; }
+    .layer_explanation_block { background: rgba(30, 41, 59, 0.8); border-radius: 8px; padding: 0.7rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .layer_explanation_block.memory-layer { border-left: 3px solid #3b82f6; }
+    .layer_explanation_block.user-layer { border-left: 3px solid #10b981; }
+    .layer-header { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .layer-badge { font-size: 0.75rem; font-weight: 600; color: #e2e8f0; }
+    .update-timing { font-size: 0.65rem; background: rgba(59, 130, 246, 0.25); padding: 0.2rem 0.5rem; border-radius: 10px; color: #93c5fd; }
+    .user-layer .update-timing { background: rgba(16, 185, 129, 0.25); color: #6ee7b7; }
+    .layer-text { font-size: 0.75rem; color: #cbd5e1; line-height: 1.5; }
+    .layer-dataflow { display: flex; align-items: center; gap: 0.5rem; }
+    .flow-label { font-size: 0.65rem; color: #64748b; white-space: nowrap; }
+    .flow-diagram { display: flex; align-items: center; gap: 0.3rem; }
+    .flow-node { font-size: 0.6rem; background: rgba(59, 130, 246, 0.2); padding: 0.25rem 0.5rem; border-radius: 4px; color: #93c5fd; }
+    .user-layer .flow-node { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+    .flow-arrow { width: 20px; height: 2px; background: #475569; position: relative; }
+    .flow-arrow::after { content: ''; position: absolute; right: 0; top: 50%; transform: translateY(-50%); border-left: 5px solid #475569; border-top: 3px solid transparent; border-bottom: 3px solid transparent; }
+    .feature-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    .feature-card { background: rgba(30, 41, 59, 0.8); border-radius: 8px; padding: 0.7rem 1rem; }
+    .feature-card h3 { font-size: 0.8rem; font-weight: 600; color: #3b82f6; margin-bottom: 0.3rem; }
+    .feature-card p { font-size: 0.7rem; color: #94a3b8; line-height: 1.5; }
+    .right-column { display: flex; flex-direction: column; gap: 0.8rem; min-height: 0; }
+    .bottom-note { text-align: center; padding: 0.5rem; font-size: 0.7rem; color: #64748b; flex-shrink: 0; }
+  </style>
+
+  <div class="page-header">
+    <h1 class="page-title">文件驱动的双层记忆架构</h1>
+    <p class="core-msg">Hermes Agent 以 Markdown 文件为持久化载体，通过 MEMORY.md 与 USER.md 的关注点分离，实现跨会话的知识沉淀与用户理解。</p>
+  </div>
+
+  <div class="main-container">
+    <div class="arch-section">
+      <h2 class="section-title">架构概览</h2>
+      <div class="architecture_diagram_block">
+        <div class="arch-diagram">
+          <div class="arch-llm">
+            <span class="llm-badge">LLM 推理引擎</span>
+          </div>
+          <div class="flow-line-wrapper">
+            <div class="flow-line">
+              <div class="flow-arrow"></div>
+            </div>
+          </div>
+          <div class="arch-modules">
+            <div class="arch-module memory-md">
+              <div class="module-icon">📋</div>
+              <div class="module-title">MEMORY.md</div>
+              <div class="module-desc">事务记忆</div>
+            </div>
+            <div class="arch-module user-md">
+              <div class="module-icon">👤</div>
+              <div class="module-title">USER.md</div>
+              <div class="module-desc">用户画像</div>
+            </div>
+          </div>
+          <div class="arch-legend">
+            <span class="legend-item"><span class="legend-color primary"></span>会话级上下文</span>
+            <span class="legend-item"><span class="legend-color accent"></span>持久化存储</span>
+            <span class="legend-item"><span class="legend-color green"></span>实时画像</span>
+          </div>
+        </div>
+      </div>
+      <div class="arch-footer">
+        <span>关注点分离: 管"事" 与 管"人"</span>
+      </div>
+    </div>
+
+    <div class="right-column">
+      <h2 class="section-title">记忆层详解</h2>
+      <div class="layer-cards">
+        <div class="layer_explanation_block memory-layer">
+          <div class="layer-header">
+            <span class="module-icon" style="font-size:1rem;">📋</span>
+            <span class="layer-badge">MEMORY.md — 管"事"</span>
+            <span class="update-timing">批量写入</span>
+          </div>
+          <p class="layer-text">记录 Agent 在当前会话中积累的事实知识、决策过程与任务进展。仅在会话终止或关键节点触发写入，减少 I/O 开销。</p>
+          <div class="layer-dataflow">
+            <span class="flow-label">数据流向:</span>
+            <div class="flow-diagram">
+              <span class="flow-node">会话事件</span>
+              <span class="flow-arrow"></span>
+              <span class="flow-node">批量聚合</span>
+              <span class="flow-arrow"></span>
+              <span class="flow-node">写入磁盘</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="layer_explanation_block user-layer">
+          <div class="layer-header">
+            <span class="module-icon" style="font-size:1rem;">👤</span>
+            <span class="layer-badge">USER.md — 管"人"</span>
+            <span class="update-timing">实时更新</span>
+          </div>
+          <p class="layer-text">刻画用户身份、偏好设置、交流风格与长期关系。每次交互后即时写入，确保 Agent 始终掌握最新用户动态。</p>
+          <div class="layer-dataflow">
+            <span class="flow-label">数据流向:</span>
+            <div class="flow-diagram">
+              <span class="flow-node">用户输入</span>
+              <span class="flow-arrow"></span>
+              <span class="flow-node">增量提取</span>
+              <span class="flow-arrow"></span>
+              <span class="flow-node">追加写入</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-row">
+          <div class="feature-card">
+            <h3>跨平台共享</h3>
+            <p>同一份记忆文件可在 Telegram、Discord、CLI 等终端间共享，实现"一处学习，处处生效"。</p>
+          </div>
+          <div class="feature-card">
+            <h3>工程优势</h3>
+            <p>规避数据库依赖，版本控制友好，天然支持云存储同步，突破单点限制。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-note">通过 Markdown 文件实现跨会话持久化与跨平台共享</div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p10" class="deck-page" style="width:100%;height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden;box-sizing:border-box;padding:24px;display:flex;flex-direction:column;gap:16px; background:#0f172a; color:#f1f5f9;">
+  <!-- 标题栏 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid rgba(59,130,246,0.3);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <iconify-icon icon="mdi:brain" style="font-size:28px;color:var(--accent);"></iconify-icon>
+      <h1 style="font-size:24px;font-weight:700;margin:0;background:linear-gradient(135deg,#3b82f6,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">记忆系统工作流程</h1>
+    </div>
+    <span class="s-badge" style="background:rgba(59,130,246,0.2);color:#60a5fa;font-size:12px;padding:4px 12px;border-radius:12px;">持续学习闭环</span>
+  </div>
+
+  <!-- 核心观点横幅 -->
+  <div class="s-alert" style="background:rgba(59,130,246,0.1);border-left:3px solid var(--accent);padding:10px 16px;border-radius:6px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <iconify-icon icon="mdi:lightbulb" style="font-size:18px;color:#fbbf24;"></iconify-icon>
+      <span style="font-size:14px;"><strong>核心机制：</strong>每次交互都在强化 Agent 的认知能力，实现<strong style="color:#60a5fa;">自我进化</strong></span>
+    </div>
+  </div>
+
+  <!-- 主内容区 -->
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;flex:1;min-height:0;">
+    <!-- 左侧：四阶段流程 -->
+    <div class="s-card" style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:16px;">
+      <h3 style="font-size:14px;font-weight:600;color:#94a3b8;margin:0 0 12px 0;text-transform:uppercase;letter-spacing:1px;">
+        <iconify-icon icon="mdi:loop" style="font-size:16px;margin-right:6px;"></iconify-icon>
+        记忆生命周期四阶段
+      </h3>
+      
+      <!-- 四阶段流程 -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;height:calc(100% - 36px);">
+        <!-- 阶段1：写入 -->
+        <div style="background:linear-gradient(180deg,rgba(59,130,246,0.15) 0%,rgba(59,130,246,0.05) 100%);border:1px solid rgba(59,130,246,0.3);border-radius:10px;padding:12px;display:flex;flex-direction:column;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">01</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;margin-top:4px;">
+            <iconify-icon icon="mdi:pencil-plus" style="font-size:18px;color:#3b82f6;"></iconify-icon>
+            <span style="font-size:13px;font-weight:600;color:#f1f5f9;">写入</span>
+          </div>
+          <ul style="font-size:11px;color:#94a3b8;margin:0;padding-left:14px;line-height:1.6;flex:1;">
+            <li>对话内容提取</li>
+            <li>实体关系识别</li>
+            <li>重要性评分</li>
+            <li>向量编码存储</li>
+          </ul>
+          <div style="font-size:10px;color:#64748b;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(100,116,139,0.3);">
+            <iconify-icon icon="mdi:database" style="font-size:12px;margin-right:4px;"></iconify-icon>向量数据库
+          </div>
+        </div>
+
+        <!-- 箭头1 -->
+        <div style="display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:arrow-right" style="font-size:24px;color:#3b82f6;"></iconify-icon>
+        </div>
+
+        <!-- 阶段2：检索 -->
+        <div style="background:linear-gradient(180deg,rgba(16,185,129,0.15) 0%,rgba(16,185,129,0.05) 100%);border:1px solid rgba(16,185,129,0.3);border-radius:10px;padding:12px;display:flex;flex-direction:column;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:#10b981;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">02</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;margin-top:4px;">
+            <iconify-icon icon="mdi:magnify" style="font-size:18px;color:#10b981;"></iconify-icon>
+            <span style="font-size:13px;font-weight:600;color:#f1f5f9;">检索</span>
+          </div>
+          <ul style="font-size:11px;color:#94a3b8;margin:0;padding-left:14px;line-height:1.6;flex:1;">
+            <li>语义相似度计算</li>
+            <li>上下文相关性过滤</li>
+            <li>时间衰减权重</li>
+            <li>Top-K 候选筛选</li>
+          </ul>
+          <div style="font-size:10px;color:#64748b;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(100,116,139,0.3);">
+            <iconify-icon icon="mdi:timer-outline" style="font-size:12px;margin-right:4px;"></iconify-icon>&lt;50ms响应
+          </div>
+        </div>
+
+        <!-- 箭头2 -->
+        <div style="display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:arrow-right" style="font-size:24px;color:#10b981;"></iconify-icon>
+        </div>
+
+        <!-- 阶段3：应用 -->
+        <div style="background:linear-gradient(180deg,rgba(245,158,11,0.15) 0%,rgba(245,158,11,0.05) 100%);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:12px;display:flex;flex-direction:column;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:#f59e0b;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">03</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;margin-top:4px;">
+            <iconify-icon icon="mdi:application-cog" style="font-size:18px;color:#f59e0b;"></iconify-icon>
+            <span style="font-size:13px;font-weight:600;color:#f1f5f9;">应用</span>
+          </div>
+          <ul style="font-size:11px;color:#94a3b8;margin:0;padding-left:14px;line-height:1.6;flex:1;">
+            <li>记忆上下文注入</li>
+            <li>用户偏好匹配</li>
+            <li>历史案例参考</li>
+            <li>个性化响应生成</li>
+          </ul>
+          <div style="font-size:10px;color:#64748b;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(100,116,139,0.3);">
+            <iconify-icon icon="mdi:account-check" style="font-size:12px;margin-right:4px;"></iconify-icon>99.2%准确率*
+          </div>
+        </div>
+
+        <!-- 箭头3 -->
+        <div style="display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:arrow-right" style="font-size:24px;color:#f59e0b;"></iconify-icon>
+        </div>
+
+        <!-- 阶段4：更新 -->
+        <div style="background:linear-gradient(180deg,rgba(168,85,247,0.15) 0%,rgba(168,85,247,0.05) 100%);border:1px solid rgba(168,85,247,0.3);border-radius:10px;padding:12px;display:flex;flex-direction:column;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:#a855f7;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;">04</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;margin-top:4px;">
+            <iconify-icon icon="mdi:refresh-circle" style="font-size:18px;color:#a855f7;"></iconify-icon>
+            <span style="font-size:13px;font-weight:600;color:#f1f5f9;">更新</span>
+          </div>
+          <ul style="font-size:11px;color:#94a3b8;margin:0;padding-left:14px;line-height:1.6;flex:1;">
+            <li>记忆强度调整</li>
+            <li>过时信息淘汰</li>
+            <li>知识体系重构</li>
+            <li>权重动态优化</li>
+          </ul>
+          <div style="font-size:10px;color:#64748b;margin-top:6px;padding-top:6px;border-top:1px dashed rgba(100,116,139,0.3);">
+            <iconify-icon icon="mdi:chart-line" style="font-size:12px;margin-right:4px;"></iconify-icon>自适应学习
+          </div>
+        </div>
+      </div>
+
+      <!-- 数据来源注释 -->
+      <div style="font-size:10px;color:#64748b;margin-top:10px;padding-top:8px;border-top:1px solid rgba(100,116,139,0.2);">
+        * 性能数据基于内部基准测试，实际表现因硬件配置而异
+      </div>
+    </div>
+
+    <!-- 右侧：技术细节面板 -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <!-- 触发条件 -->
+      <div class="s-card" style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px;flex:1;">
+        <h4 style="font-size:12px;font-weight:600;color:#60a5fa;margin:0 0 8px 0;display:flex;align-items:center;gap:6px;">
+          <iconify-icon icon="mdi:lightning-bolt" style="font-size:14px;"></iconify-icon>
+          触发条件
+        </h4>
+        <div style="font-size:11px;color:#94a3b8;line-height:1.6;">
+          <div style="margin-bottom:6px;"><span class="s-badge" style="background:rgba(59,130,246,0.2);font-size:10px;">自动</span> 每轮对话结束自动触发</div>
+          <div style="margin-bottom:6px;"><span class="s-badge" style="background:rgba(16,185,129,0.2);font-size:10px;">关键词</span> 检测到实体/概念时</div>
+          <div style="margin-bottom:6px;"><span class="s-badge" style="background:rgba(245,158,11,0.2);font-size:10px;">显式</span> 用户请求"记住/学习"</div>
+          <div><span class="s-badge" style="background:rgba(168,85,247,0.2);font-size:10px;">定时</span> 24h自动摘要整合</div>
+        </div>
+      </div>
+
+      <!-- 关键决策点 -->
+      <div class="s-card" style="background:rgba(15,23,42,0.8);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:12px;flex:1;">
+        <h4 style="font-size:12px;font-weight:600;color:#f59e0b;margin:0 0 8px 0;display:flex;align-items:center;gap:6px;">
+          <iconify-icon icon="mdi:decisions" style="font-size:14px;"></iconify-icon>
+          关键决策点
+        </h4>
+        <div style="font-size:11px;color:#94a3b8;line-height:1.6;">
+          <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+            <iconify-icon icon="mdi:checkbox-marked" style="font-size:12px;color:#10b981;"></iconify-icon>
+            重要性 &gt; 0.7 → 写入长期记忆
+          </div>
+          <div style="margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+            <iconify-icon icon="mdi:checkbox-marked" style="font-size:12px;color:#10b981;"></iconify-icon>
+            相似度 &gt; 0.85 → 合并更新
+          </div>
+          <div style="margin-bottom:6px;display:-flex;align-items:center;gap:4px;">
+            <iconify-icon icon="mdi:checkbox-marked" style="font-size:12px;color:#10b981;"></iconify-icon>
+            置信度 &lt; 0.5 → 标记待确认
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <iconify-icon icon="mdi:checkbox-marked" style="font-size:12px;color:#10b981;"></iconify-icon>
+            冲突时 → 保留最新 + 记录差异
+          </div>
+        </div>
+      </div>
+
+      <!-- 异常处理 -->
+      <div class="s-card" style="background:rgba(15,23,42,0.8);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:12px;flex:1;">
+        <h4 style="font-size:12px;font-weight:600;color:#ef4444;margin:0 0 8px 0;display:flex;align-items:center;gap:6px;">
+          <iconify-icon icon="mdi:shield-alert" style="font-size:14px;"></iconify-icon>
+          异常处理机制
+        </h4>
+        <div style="font-size:11px;color:#94a3b8;line-height:1.6;">
+          <div style="margin-bottom:4px;"><span style="color:#ef4444;">⚠ 存储失败</span> → 重试3次后降级写入本地缓存</div>
+          <div style="margin-bottom:4px;"><span style="color:#ef4444;">⚠ 检索超时</span> → 返回空结果，不阻塞主流程</div>
+          <div style="margin-bottom:4px;"><span style="color:#ef4444;">⚠ 内存超限</span> → LRU淘汰 + 分页加载</div>
+          <div><span style="color:#ef4444;">⚠ 数据污染</span> → 隔离区 + 人工复核队列</div>
+        </div>
+      </div>
+
+      <!-- 性能指标 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="s-stat" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px;text-align:center;">
+          <div class="s-stat-value" style="font-size:20px;font-weight:700;color:#3b82f6;">10K+</div>
+          <div class="s-stat-label" style="font-size:10px;color:#64748b;">日均记忆写入*</div>
+        </div>
+        <div class="s-stat" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:10px;text-align:center;">
+          <div class="s-stat-value" style="font-size:20px;font-weight:700;color:#10b981;">256</div>
+          <div class="s-stat-label" style="font-size:10px;color:#64748b;">上下文token*</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部状态栏 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(59,130,246,0.1);border-radius:8px;font-size:11px;color:#64748b;">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <span style="display:flex;align-items:center;gap:4px;">
+        <iconify-icon icon="mdi:circle" style="font-size:8px;color:#10b981;"></iconify-icon>
+        系统正常
+      </span>
+      <span>|</span>
+      <span>记忆容量: 1.2GB / 2GB</span>
+      <span>|</span>
+      <span>在线: 3,847 sessions</span>
+    </div>
+    <div>
+      <span class="s-badge" style="background:rgba(168,85,247,0.2);color:#a855f7;font-size:10px;">示意数据*</span>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p07" class="deck-page" style="width:100%;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;overflow:hidden;box-sizing:border-box; background:#0f172a; color:#f1f5f9;">
+
+<style>
+.page07-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;height:100%;padding:20px;box-sizing:border-box;}
+.page07-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.page07-title{font-size:22px;font-weight:700;margin:0;color:var(--text);}
+.page07-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.15);border:1px solid var(--accent);color:var(--accent);padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;}
+.page07-badge svg{width:16px;height:16px;}
+.platform-matrix{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.platform-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all 0.2s;}
+.platform-card:hover{background:rgba(59,130,246,0.08);border-color:var(--accent);}
+.platform-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.platform-name{font-size:11px;font-weight:600;color:var(--text);text-align:center;}
+.complexity-tag{font-size:9px;padding:2px 6px;border-radius:4px;font-weight:500;}
+.complexity-easy{background:rgba(34,197,94,0.15);color:#22c55e;}
+.complexity-medium{background:rgba(234,179,8,0.15);color:#eab308;}
+.platform-telegram{background:linear-gradient(135deg,#0088cc,#29b6f6);}
+.platform-discord{background:linear-gradient(135deg,#5865f2,#7289da);}
+.platform-slack{background:linear-gradient(135deg,#4a154b,#611f69);}
+.platform-whatsapp{background:linear-gradient(135deg,#25d366,#128c7e);}
+.platform-line{background:linear-gradient(135deg,#00b900,#00a800);}
+.platform-wechat{background:linear-gradient(135deg,#07c160,#4cd964);}
+.platform-matrix-icon{background:linear-gradient(135deg,#000000,#333);}
+.platform-irc{background:linear-gradient(135deg,#ff6600,#ff8c00);}
+.right-panel{display:flex;flex-direction:column;gap:12px;height:100%;}
+.feature-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;flex:1;}
+.feature-card-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:10px;color:var(--text);}
+.feature-card-title iconify-icon{color:var(--accent);}
+.feature-list{list-style:none;padding:0;margin:0;font-size:11px;line-height:1.7;}
+.feature-list li{display:flex;align-items:flex-start;gap:6px;color:rgba(241,245,249,0.85);}
+.feature-list iconify-icon{color:#22c55e;flex-shrink:0;margin-top:2px;}
+.config-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:auto;}
+.config-step{background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:10px;display:flex;align-items:center;gap:10px;}
+.step-num{width:28px;height:28px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
+.step-text{font-size:11px;line-height:1.4;}
+.step-text strong{display:block;color:var(--text);}
+.step-text span{color:rgba(241,245,249,0.7);}
+.bottom-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:rgba(255,255,255,0.02);border-top:1px solid rgba(255,255,255,0.06);margin-top:12px;}
+.cta-btn{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:all 0.2s;}
+.cta-btn:hover{background:#2563eb;transform:translateY(-1px);}
+.compat-table{width:100%;margin-top:8px;font-size:10px;border-collapse:collapse;}
+.compat-table th,.compat-table td{padding:5px 8px;text-align:center;border:1px solid rgba(255,255,255,0.06);}
+.compat-table th{background:rgba(59,130,246,0.1);color:var(--accent);font-weight:600;}
+.compat-table td{color:rgba(241,245,249,0.8);}
+.support-stat{display:flex;align-items:center;gap:16px;}
+.stat-item{text-align:center;}
+.stat-value{font-size:20px;font-weight:700;color:var(--accent);}
+.stat-label{font-size:10px;color:rgba(241,245,249,0.6);margin-top:2px;}
+</style>
+
+<div style="display:flex;flex-direction:column;height:100%;">
+<!-- Header -->
+<div class="page07-header" style="padding:20px 24px 0;">
+<div>
+<h1 class="page07-title">多平台集成能力</h1>
+<p style="margin:4px 0 0;font-size:13px;color:rgba(241,245,249,0.7);">一处配置，全平台通用的无缝体验</p>
+</div>
+<div class="page07-badge">
+<iconify-icon icon="mdi:connection" style="width:16px;height:16px;"></iconify-icon>
+8+ 主流平台支持
+</div>
+</div>
+
+<!-- Main Content Grid -->
+<div class="page07-grid" style="flex:1;min-height:0;">
+
+<!-- Left: Platform Matrix -->
+<div>
+<div style="margin-bottom:12px;">
+<p style="font-size:12px;color:rgba(241,245,249,0.6);margin:0 0 8px;">统一接入层 · 单配置文件管理所有平台</p>
+<div class="platform-matrix">
+<!-- Telegram -->
+<div class="platform-card">
+<div class="platform-icon platform-telegram">✈️</div>
+<div class="platform-name">Telegram</div>
+<span class="complexity-tag complexity-easy">简单</span>
+</div>
+<!-- Discord -->
+<div class="platform-card">
+<div class="platform-icon platform-discord">🎮</div>
+<div class="platform-name">Discord</div>
+<span class="complexity-tag complexity-easy">简单</span>
+</div>
+<!-- Slack -->
+<div class="platform-card">
+<div class="platform-icon platform-slack">💬</div>
+<div class="platform-name">Slack</div>
+<span class="complexity-tag complexity-medium">中等</span>
+</div>
+<!-- WhatsApp -->
+<div class="platform-card">
+<div class="platform-icon platform-whatsapp">📱</div>
+<div class="platform-name">WhatsApp</div>
+<span class="complexity-tag complexity-medium">中等</span>
+</div>
+<!-- LINE -->
+<div class="platform-card">
+<div class="platform-icon platform-line">💚</div>
+<div class="platform-name">LINE</div>
+<span class="complexity-tag complexity-easy">简单</span>
+</div>
+<!-- WeChat -->
+<div class="platform-card">
+<div class="platform-icon platform-wechat">💬</div>
+<div class="platform-name">微信</div>
+<span class="complexity-tag complexity-medium">中等</span>
+</div>
+<!-- Matrix -->
+<div class="platform-card">
+<div class="platform-icon platform-matrix-icon">⚡</div>
+<div class="platform-name">Matrix</div>
+<span class="complexity-tag complexity-easy">简单</span>
+</div>
+<!-- IRC -->
+<div class="platform-card">
+<div class="platform-icon platform-irc">🌐</div>
+<div class="platform-name">IRC</div>
+<span class="complexity-tag complexity-medium">中等</span>
+</div>
+</div>
+</div>
+
+<!-- Feature Highlight Block -->
+<div class="feature-card">
+<div class="feature-card-title">
+<iconify-icon icon="mdi:brain" width="18" height="18"></iconify-icon>
+跨平台记忆同步
+</div>
+<ul class="feature-list">
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>MEMORY.md + USER.md 双层记忆架构</li>
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>用户偏好跨平台传递与上下文保持</li>
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>会话历史自动聚合与检索</li>
+</ul>
+</div>
+
+<!-- Compatibility Mini Table -->
+<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;">
+<p style="font-size:11px;font-weight:600;margin:0 0 8px;color:var(--accent);">功能兼容性矩阵</p>
+<table class="compat-table">
+<tr><th>平台</th><th>记忆同步</th><th>工具调用</th><th>多模态</th></tr>
+<tr><td>Telegram</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Discord</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>Slack</td><td>✓</td><td>✓</td><td>—</td></tr>
+<tr><td>微信</td><td>✓</td><td>✓</td><td>—</td></tr>
+</table>
+</div>
+</div>
+
+<!-- Right: Feature Cards + Config Steps -->
+<div class="right-panel">
+<div class="feature-card">
+<div class="feature-card-title">
+<iconify-icon icon="mdi:cog-sync" width="18" height="18"></iconify-icon>
+统一配置管理
+</div>
+<ul class="feature-list">
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>config.yaml 一处定义所有平台凭证</li>
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>环境变量隔离敏感信息</li>
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>运行时热加载无需重启</li>
+</ul>
+</div>
+
+<div class="feature-card">
+<div class="feature-card-title">
+<iconify-icon icon="mdi:shield-check" width="18" height="18"></iconify-icon>
+企业级安全保障
+</div>
+<ul class="feature-list">
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>端到端加密通信 (TLS 1.3)</li>
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>平台 API 密钥加密存储</li>
+<li><iconify-icon icon="mdi:check-circle" width="12"></iconify-icon>细粒度权限控制与审计日志</li>
+</ul>
+</div>
+
+<div class="feature-card" style="flex:0 0 auto;">
+<div class="feature-card-title">
+<iconify-icon icon="mdi:lightning-bolt" width="18" height="18"></iconify-icon>
+3步快速接入
+</div>
+<div class="config-steps">
+<div class="config-step">
+<div class="step-num">1</div>
+<div class="step-text"><strong>安装</strong><span>pip install hermes-agent</span></div>
+</div>
+<div class="config-step">
+<div class="step-num">2</div>
+<div class="step-text"><strong>配置</strong><span>填写 platforms 节点</span></div>
+</div>
+<div class="config-step">
+<div class="step-num">3</div>
+<div class="step-text"><strong>启动</strong><span>hermes run --all</span></div>
+</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+<div class="s-stat" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:12px;text-align:center;">
+<div class="s-stat-value" style="color:var(--accent);">200+</div>
+<div class="s-stat-label" style="font-size:10px;color:rgba(241,245,249,0.6);">支持模型数</div>
+</div>
+<div class="s-stat" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:12px;text-align:center;">
+<div class="s-stat-value" style="color:var(--accent);">&lt;5min</div>
+<div class="s-stat-label" style="font-size:10px;color:rgba(241,245,249,0.6);">平均部署时间</div>
+</div>
+</div>
+</div>
+
+</div>
+
+<!-- Bottom CTA Bar -->
+<div class="bottom-bar">
+<div class="support-stat">
+<div class="stat-item">
+<div class="stat-value">8+</div>
+<div class="stat-label">接入平台</div>
+</div>
+<div class="stat-item">
+<div class="stat-value">100%</div>
+<div class="stat-label">记忆一致性</div>
+</div>
+<div class="stat-item">
+<div class="stat-value">24/7</div>
+<div class="stat-label">无缝运行</div>
+</div>
+</div>
+<div style="display:flex;gap:10px;">
+<a href="#" class="cta-btn">
+部署指南
+<iconify-icon icon="mdi:arrow-right" width="16"></iconify-icon>
+</a>
+</div>
+</div>
+
+</div>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p08" class="deck-page" style="width:100%;height:100%;background:#0f172a;color:#f1f5f9;font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden; background:#0f172a; color:#f1f5f9;">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    .p08-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;height:100%;padding:32px 40px;box-sizing:border-box;}
+    .p08-left{display:flex;flex-direction:column;gap:16px;}
+    .p08-header{display:flex;align-items:center;gap:12px;margin-bottom:8px;}
+    .p08-title{font-size:32px;font-weight:800;letter-spacing:-0.5px;}
+    .p08-subtitle{font-size:14px;color:#94a3b8;margin-top:4px;}
+    .p08-models-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;}
+    .p08-model-card{background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px;transition:all 0.3s;}
+    .p08-model-card:hover{background:rgba(59,130,246,0.15);border-color:rgba(59,130,246,0.4);transform:translateY(-2px);}
+    .p08-model-icon{width:40px;height:40px;background:rgba(59,130,246,0.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+    .p08-model-name{font-size:14px;font-weight:700;color:#fff;}
+    .p08-model-count{font-size:11px;color:#3b82f6;font-weight:600;}
+    .p08-model-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
+    .p08-tag{font-size:9px;padding:2px 6px;background:rgba(148,163,184,0.15);border-radius:4px;color:#94a3b8;}
+    .p08-right{display:flex;flex-direction:column;gap:16px;}
+    .p08-stat-row{display:flex;gap:16px;margin-bottom:8px;}
+    .p08-stat{background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(59,130,246,0.05));border:1px solid rgba(59,130,246,0.3);border-radius:12px;padding:20px;flex:1;text-align:center;}
+    .p08-stat-value{font-size:42px;font-weight:800;color:#3b82f6;line-height:1;}
+    .p08-stat-label{font-size:12px;color:#94a3b8;margin-top:6px;}
+    .p08-capabilities{display:flex;flex-direction:column;gap:10px;flex:1;}
+    .p08-cap{background:rgba(30,41,59,0.8);border:1px solid rgba(71,85,105,0.4);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px;}
+    .p08-cap-icon{width:36px;height:36px;background:rgba(59,130,246,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .p08-cap-content{flex:1;}
+    .p08-cap-title{font-size:14px;font-weight:700;margin-bottom:2px;}
+    .p08-cap-desc{font-size:11px;color:#64748b;line-height:1.4;}
+    .p08-footer{display:flex;gap:20px;margin-top:auto;padding-top:12px;}
+    .p08-footer-item{display:flex;align-items:center;gap:8px;font-size:11px;color:#64748b;}
+    .p08-footer-item iconify-icon{color:#3b82f6;}
+    .p08-badge{position:absolute;top:16px;right:16px;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:4px 12px;font-size:10px;font-weight:600;color:#3b82f6;}
+    .p08-visual{position:relative;background:linear-gradient(145deg,rgba(59,130,246,0.1) 0%,rgba(139,92,246,0.1) 100%);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px;}
+    .p08-visual-title{font-size:13px;font-weight:700;color:#e2e8f0;}
+    .p08-providers{display:flex;flex-wrap:wrap;gap:8px;}
+    .p08-provider{background:rgba(15,23,42,0.6);border:1px solid rgba(71,85,105,0.5);border-radius:8px;padding:8px 12px;font-size:11px;display:flex;align-items:center;gap:6px;}
+    .p08-provider-dot{width:6px;height:6px;border-radius:50%;}
+  </style>
+
+  <div class="p08-grid">
+    <div class="p08-left">
+      <div class="p08-header">
+        <iconify-icon icon="mdi:api" style="font-size:28px;color:#3b82f6;"></iconify-icon>
+        <div>
+          <div class="p08-title">多后端 LLM 支持</div>
+          <div class="p08-subtitle">一次接入，200+ 模型任选</div>
+        </div>
+      </div>
+      
+      <div class="p08-models-grid">
+        <div class="p08-model-card">
+          <div class="p08-model-icon">🔗</div>
+          <div class="p08-model-name">OpenRouter</div>
+          <div class="p08-model-count">80+ 模型</div>
+          <div class="p08-model-tags">
+            <span class="p08-tag">聚合网关</span>
+            <span class="p08-tag">统一计费</span>
+          </div>
+        </div>
+        <div class="p08-model-card">
+          <div class="p08-model-icon">🖥️</div>
+          <div class="p08-model-name">Ollama</div>
+          <div class="p08-model-count">本地部署</div>
+          <div class="p08-model-tags">
+            <span class="p08-tag">隐私优先</span>
+            <span class="p08-tag">离线可用</span>
+          </div>
+        </div>
+        <div class="p08-model-card">
+          <div class="p08-model-icon">🟢</div>
+          <div class="p08-model-name">OpenAI</div>
+          <div class="p08-model-count">GPT-4o/GPT-4</div>
+          <div class="p08-model-tags">
+            <span class="p08-tag">API 兼容</span>
+            <span class="p08-tag">即插即用</span>
+          </div>
+        </div>
+        <div class="p08-model-card">
+          <div class="p08-model-icon">☁️</div>
+          <div class="p08-model-name">Azure OpenAI</div>
+          <div class="p08-model-count">企业级</div>
+          <div class="p08-model-tags">
+            <span class="p08-tag">SLA 保障</span>
+            <span class="p08-tag">数据合规</span>
+          </div>
+        </div>
+        <div class="p08-model-card">
+          <div class="p08-model-icon">💎</div>
+          <div class="p08-model-name">Google Gemini</div>
+          <div class="p08-model-count">Gemini 2.0</div>
+          <div class="p08-model-tags">
+            <span class="p08-tag">多模态</span>
+            <span class="p08-tag">长上下文</span>
+          </div>
+        </div>
+        <div class="p08-model-card">
+          <div class="p08-model-icon">🧠</div>
+          <div class="p08-model-name">Anthropic</div>
+          <div class="p08-model-count">Claude 3.5</div>
+          <div class="p08-model-tags">
+            <span class="p08-tag">长思考</span>
+            <span class="p08-tag">安全对齐</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="p08-right">
+      <div class="p08-stat-row">
+        <div class="p08-stat">
+          <div class="p08-stat-value">200+</div>
+          <div class="p08-stat-label">支持模型数量</div>
+        </div>
+        <div class="p08-stat">
+          <div class="p08-stat-value">6+</div>
+          <div class="p08-stat-label">主流后端服务</div>
+        </div>
+        <div class="p08-stat">
+          <div class="p08-stat-value">1行</div>
+          <div class="p08-stat-label">配置切换</div>
+        </div>
+      </div>
+
+      <div class="p08-visual">
+        <div class="p08-visual-title">兼容模型类别</div>
+        <div class="p08-providers">
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#f97316;"></span> Llama 3.3</div>
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#a855f7;"></span> QwQ 32B</div>
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#06b6d4;"></span> DeepSeek V3</div>
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#84cc16;"></span> Mistral</div>
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#f43f5e;"></span> Command R+</div>
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#3b82f6;"></span> Yi Lightning</div>
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#eab308;"></span> Mixtral 8x22B</div>
+          <div class="p08-provider"><span class="p08-provider-dot" style="background:#14b8a6;"></span> Gemma 2</div>
+        </div>
+      </div>
+
+      <div class="p08-capabilities">
+        <div class="p08-cap">
+          <div class="p08-cap-icon"><iconify-icon icon="mdi:swap-horizontal" style="font-size:20px;color:#3b82f6;"></iconify-icon></div>
+          <div class="p08-cap-content">
+            <div class="p08-cap-title">模型热切换</div>
+            <div class="p08-cap-desc">运行时无缝切换模型，无需重启服务，支持动态负载均衡</div>
+          </div>
+        </div>
+        <div class="p08-cap">
+          <div class="p08-cap-icon"><iconify-icon icon="mdi:shield-check" style="font-size:20px;color:#22c55e;"></iconify-icon></div>
+          <div class="p08-cap-content">
+            <div class="p08-cap-title">统一 API 接口</div>
+            <div class="p08-cap-desc">兼容 OpenAI 格式，一次接入即可调用所有后端，降低迁移成本</div>
+          </div>
+        </div>
+        <div class="p08-cap">
+          <div class="p08-cap-icon"><iconify-icon icon="mdi:currency-usd" style="font-size:20px;color:#eab308;"></iconify-icon></div>
+          <div class="p08-cap-content">
+            <div class="p08-cap-title">灵活计费</div>
+            <div class="p08-cap-desc">本地模型零成本，云端按量付费，支持成本监控与预算告警</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p08-footer">
+        <div class="p08-footer-item">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;"></iconify-icon>
+          <span>配置复杂度：低（环境变量）</span>
+        </div>
+        <div class="p08-footer-item">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;"></iconify-icon>
+          <span>兼容性：OpenAI SDK 全兼容</span>
+        </div>
+        <div class="p08-footer-item">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;"></iconify-icon>
+          <span>本地/云端自由切换</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p09" class="deck-page" style="width:100%;height:100%;background:#0f172a;color:#f1f5f9;font-family:'Inter','Noto Sans SC',sans-serif;padding:32px;box-sizing:border-box;overflow:hidden;background:#0f172a;">
+  <div style="display:flex;flex-direction:column;height:100%;gap:16px;">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="s-badge" style="background:#3b82f6;color:#fff;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;">核心能力</span>
+        <span style="color:#94a3b8;font-size:13px;">Hermes Agent 技术解析</span>
+      </div>
+      <h1 style="font-size:26px;font-weight:700;margin:0;background:linear-gradient(135deg,#3b82f6,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">
+        技能自动生成系统
+      </h1>
+    </div>
+
+    <!-- Subtitle -->
+    <p style="font-size:14px;color:#94a3b8;margin:0;flex-shrink:0;">从「授人以鱼」到「授人以渔」— Agent 学会自我扩展能力</p>
+
+    <!-- Main Content Area -->
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px;flex:1;min-height:0;overflow:hidden;">
+      <!-- Left: Skill Generation (Core Focus) -->
+      <div class="s-card" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);padding:16px;display:flex;flex-direction:column;overflow:hidden;">
+        <h3 style="font-size:14px;font-weight:600;margin:0 0 12px;display:flex;align-items:center;gap:8px;">
+          <iconify-icon icon="mdi:auto-fix" style="color:#3b82f6;"></iconify-icon>
+          渐进式技能生成
+        </h3>
+        
+        <!-- Visual Block: Skill Generation Flow -->
+        <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:14px;flex-shrink:0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="text-align:center;flex:1;">
+              <div style="width:42px;height:42px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+                <iconify-icon icon="mdi:head-lightbulb" style="font-size:20px;color:#fff;"></iconify-icon>
+              </div>
+              <div style="font-size:10px;color:#94a3b8;">任务识别</div>
+            </div>
+            <iconify-icon icon="mdi:arrow-right" style="color:#3b82f6;font-size:16px;flex-shrink:0;"></iconify-icon>
+            <div style="text-align:center;flex:1;">
+              <div style="width:42px;height:42px;background:#8b5cf6;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+                <iconify-icon icon="mdi:code-braces" style="font-size:20px;color:#fff;"></iconify-icon>
+              </div>
+              <div style="font-size:10px;color:#94a3b8;">技能编码</div>
+            </div>
+            <iconify-icon icon="mdi:arrow-right" style="color:#3b82f6;font-size:16px;flex-shrink:0;"></iconify-icon>
+            <div style="text-align:center;flex:1;">
+              <div style="width:42px;height:42px;background:#10b981;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+                <iconify-icon icon="mdi:check-circle" style="font-size:20px;color:#fff;"></iconify-icon>
+              </div>
+              <div style="font-size:10px;color:#94a3b8;">质量验证</div>
+            </div>
+            <iconify-icon icon="mdi:arrow-right" style="color:#3b82f6;font-size:16px;flex-shrink:0;"></iconify-icon>
+            <div style="text-align:center;flex:1;">
+              <div style="width:42px;height:42px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+                <iconify-icon icon="mdi:rocket-launch" style="font-size:20px;color:#fff;"></iconify-icon>
+              </div>
+              <div style="font-size:10px;color:#94a3b8;">技能注册</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Two info boxes -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;flex-shrink:0;">
+          <div class="s-alert" style="padding:8px 10px;">
+            <div style="font-size:10px;color:#94a3b8;margin-bottom:2px;">学习模式</div>
+            <div style="font-size:12px;font-weight:500;">观察 → 推理 → 实践</div>
+          </div>
+          <div class="s-alert s-alert-success" style="padding:8px 10px;">
+            <div style="font-size:10px;color:#94a3b8;margin-bottom:2px;">技能类型</div>
+            <div style="font-size:12px;font-weight:500;">工具 / 工作流 / 知识</div>
+          </div>
+        </div>
+
+        <!-- Use Case Example -->
+        <div style="margin-top:10px;padding:10px;background:rgba(59,130,246,0.15);border-radius:8px;border-left:3px solid #3b82f6;flex-shrink:0;">
+          <div style="font-size:11px;font-weight:600;color:#60a5fa;margin-bottom:4px;">💡 应用场景</div>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.5;">
+            用户说"帮我分析股票" → Agent 自动生成股票分析技能 → 保存至技能库供后续使用
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column Stack -->
+      <div style="display:flex;flex-direction:column;gap:16px;min-height:0;overflow:hidden;">
+        <!-- Standard Block -->
+        <div class="s-card" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);padding:14px;flex:1;overflow:hidden;">
+          <h3 style="font-size:14px;font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px;">
+            <iconify-icon icon="mdi:certificate" style="color:#8b5cf6;"></iconify-icon>
+            agentskills.io 标准
+          </h3>
+          
+          <div style="font-size:12px;color:#94a3b8;margin-bottom:10px;line-height:1.5;">
+            统一技能描述规范，让 Agent 技能可发现、可验证、可复用
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;">
+              <iconify-icon icon="mdi:format-list-bulleted" style="color:#8b5cf6;flex-shrink:0;margin-top:2px;font-size:16px;"></iconify-icon>
+              <div>
+                <div style="font-size:12px;font-weight:500;margin-bottom:2px;">Skill Schema 定义</div>
+                <div style="font-size:11px;color:#64748b;">name, description, parameters</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;">
+              <iconify-icon icon="mdi:shield-check" style="color:#10b981;flex-shrink:0;margin-top:2px;font-size:16px;"></iconify-icon>
+              <div>
+                <div style="font-size:12px;font-weight:500;margin-bottom:2px;">能力标签体系</div>
+                <div style="font-size:11px;color:#64748b;">分类、难度、安全等级</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;">
+              <iconify-icon icon="mdi:test-tube" style="color:#f59e0b;flex-shrink:0;margin-top:2px;font-size:16px;"></iconify-icon>
+              <div>
+                <div style="font-size:12px;font-weight:500;margin-bottom:2px;">测试用例规范</div>
+                <div style="font-size:11px;color:#64748b;">input/output, edge cases</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Row: Combined Quality & Reusability -->
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;flex-shrink:0;">
+      <!-- Quality Assurance -->
+      <div class="s-card" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);padding:14px;">
+        <h3 style="font-size:14px;font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px;">
+          <iconify-icon icon="mdi:quality-high" style="color:#10b981;"></iconify-icon>
+          生成质量保障机制
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+          <div style="text-align:center;padding:10px 6px;background:rgba(0,0,0,0.2);border-radius:8px;">
+            <div style="font-size:20px;font-weight:700;color:#10b981;margin-bottom:2px;">3层</div>
+            <div style="font-size:10px;color:#94a3b8;">自动校验</div>
+          </div>
+          <div style="text-align:center;padding:10px 6px;background:rgba(0,0,0,0.2);border-radius:8px;">
+            <div style="font-size:20px;font-weight:700;color:#10b981;margin-bottom:2px;">95%</div>
+            <div style="font-size:10px;color:#94a3b8;">代码审查</div>
+          </div>
+          <div style="text-align:center;padding:10px 6px;background:rgba(0,0,0,0.2);border-radius:8px;">
+            <div style="font-size:20px;font-weight:700;color:#10b981;margin-bottom:2px;">98%</div>
+            <div style="font-size:10px;color:#94a3b8;">性能基准</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <span class="s-badge" style="background:rgba(16,185,129,0.2);color:#10b981;font-size:9px;padding:2px 6px;">语法检查</span>
+          <span class="s-badge" style="background:rgba(16,185,129,0.2);color:#10b981;font-size:9px;padding:2px 6px;">语义验证</span>
+          <span class="s-badge" style="background:rgba(16,185,129,0.2);color:#10b981;font-size:9px;padding:2px 6px;">安全扫描</span>
+        </div>
+      </div>
+
+      <!-- Skill Reusability -->
+      <div class="s-card" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);padding:14px;">
+        <h3 style="font-size:14px;font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px;">
+          <iconify-icon icon="mdi:recycle" style="color:#f59e0b;"></iconify-icon>
+          技能可复用性
+        </h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;border-left:2px solid #f59e0b;">
+            <div style="font-size:11px;font-weight:600;margin-bottom:2px;">跨任务复用</div>
+            <div style="font-size:10px;color:#94a3b8;">多任务调用</div>
+          </div>
+          <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;border-left:2px solid #f59e0b;">
+            <div style="font-size:11px;font-weight:600;margin-bottom:2px;">跨场景迁移</div>
+            <div style="font-size:10px;color:#94a3b8;">环境适配</div>
+          </div>
+          <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;border-left:2px solid #f59e0b;">
+            <div style="font-size:11px;font-weight:600;margin-bottom:2px;">社区共享</div>
+            <div style="font-size:10px;color:#94a3b8;">技能发布</div>
+          </div>
+          <div style="padding:8px;background:rgba(0,0,0,0.2);border-radius:6px;border-left:2px solid #f59e0b;">
+            <div style="font-size:11px;font-weight:600;margin-bottom:2px;">版本迭代</div>
+            <div style="font-size:10px;color:#94a3b8;">持续优化</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Decorative Elements -->
+  <div style="position:absolute;top:0;right:0;width:280px;height:280px;background:radial-gradient(circle at center,rgba(59,130,246,0.12) 0%,transparent 70%);pointer-events:none;"></div>
+  <div style="position:absolute;bottom:0;left:0;width:350px;height:350px;background:radial-gradient(circle at center,rgba(139,92,246,0.08) 0%,transparent 70%);pointer-events:none;"></div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p10" class="deck-page" style="width:100%;height:100%;background:#0f172a;color:#f1f5f9;padding:24px 32px;box-sizing:border-box;font-family:'Segoe UI',system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;overflow:hidden;">
+  <header style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:2px solid rgba(59,130,246,0.3);flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <iconify-icon icon="mdi:toolbox-outline" style="font-size:32px;color:#3b82f6;"></iconify-icon>
+      <div>
+        <h1 style="margin:0;font-size:24px;font-weight:700;">工具生态系统</h1>
+        <p style="margin:2px 0 0;font-size:12px;color:#94a3b8;">开箱即用的完整工具链 · 协同赋能 Agent 能力</p>
+      </div>
+    </div>
+    <div style="background:rgba(59,130,246,0.15);color:#60a5fa;padding:6px 14px;font-size:12px;font-weight:600;border-radius:6px;">
+      <iconify-icon icon="mdi:check-circle" style="font-size:13px;vertical-align:middle;margin-right:5px;"></iconify-icon>
+      内置 5 大类工具
+    </div>
+  </header>
+
+  <div class="s-grid-4" style="flex:1.1;gap:14px;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);">
+    <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#60a5fa);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:magnify" style="font-size:20px;color:#fff;"></iconify-icon>
+          </div>
+          <span style="font-weight:600;font-size:14px;">Web 搜索</span>
+        </div>
+        <span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:10px;padding:3px 7px;border-radius:4px;">开箱即用</span>
+      </div>
+      <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.4;">实时获取互联网信息，支持 Google、Bing、DuckDuckGo 等多引擎</p>
+      <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(148,163,184,0.1);">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;">
+          <span>配置复杂度</span>
+          <span style="color:#22c55e;">● 无需配置</span>
+        </div>
+        <div style="display:flex;gap:3px;margin-top:5px;">
+          <span style="background:rgba(59,130,246,0.1);color:#60a5fa;font-size:9px;padding:2px 6px;border-radius:3px;">多引擎</span>
+          <span style="background:rgba(59,130,246,0.1);color:#60a5fa;font-size:9px;padding:2px 6px;border-radius:3px;">实时数据</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#8b5cf6,#a78bfa);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:web" style="font-size:20px;color:#fff;"></iconify-icon>
+          </div>
+          <span style="font-weight:600;font-size:14px;">浏览器自动化</span>
+        </div>
+        <span style="background:rgba(234,179,8,0.15);color:#eab308;font-size:10px;padding:3px 7px;border-radius:4px;">需要配置</span>
+      </div>
+      <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.4;">Playwright 驱动，支持网页抓取、表单填写、动态内容交互</p>
+      <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(148,163,184,0.1);">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;">
+          <span>配置复杂度</span>
+          <span style="color:#eab308;">● ● ○ 中等</span>
+        </div>
+        <div style="display:flex;gap:3px;margin-top:5px;">
+          <span style="background:rgba(139,92,246,0.1);color:#a78bfa;font-size:9px;padding:2px 6px;border-radius:3px;">Playwright</span>
+          <span style="background:rgba(139,92,246,0.1);color:#a78bfa;font-size:9px;padding:2px 6px;border-radius:3px;">无头模式</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#ec4899,#f472b6);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:camera" style="font-size:20px;color:#fff;"></iconify-icon>
+          </div>
+          <span style="font-weight:600;font-size:14px;">视觉理解</span>
+        </div>
+        <span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:10px;padding:3px 7px;border-radius:4px;">开箱即用</span>
+      </div>
+      <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.4;">图像/视频分析，截图理解，视觉内容问答，文档 OCR</p>
+      <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(148,163,184,0.1);">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;">
+          <span>配置复杂度</span>
+          <span style="color:#22c55e;">● 无需配置</span>
+        </div>
+        <div style="display:flex;gap:3px;margin-top:5px;">
+          <span style="background:rgba(236,72,153,0.1);color:#f472b6;font-size:9px;padding:2px 6px;border-radius:3px;">多模态</span>
+          <span style="background:rgba(236,72,153,0.1);color:#f472b6;font-size:9px;padding:2px 6px;border-radius:3px;">OCR</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#14b8a6,#2dd4bf);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:image" style="font-size:20px;color:#fff;"></iconify-icon>
+          </div>
+          <span style="font-weight:600;font-size:14px;">图像生成</span>
+        </div>
+        <span style="background:rgba(234,179,8,0.15);color:#eab308;font-size:10px;padding:3px 7px;border-radius:4px;">需要配置</span>
+      </div>
+      <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.4;">DALL-E、Stable Diffusion、Firefly 等主流绘图模型集成</p>
+      <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(148,163,184,0.1);">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;">
+          <span>配置复杂度</span>
+          <span style="color:#eab308;">● ● ○ 中等</span>
+        </div>
+        <div style="display:flex;gap:3px;margin-top:5px;">
+          <span style="background:rgba(20,184,166,0.1);color:#2dd4bf;font-size:9px;padding:2px 6px;border-radius:3px;">DALL-E</span>
+          <span style="background:rgba(20,184,166,0.1);color:#2dd4bf;font-size:9px;padding:2px 6px;border-radius:3px;">SDXL</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="s-grid-3" style="flex:1.1;gap:14px;min-height:0;display:grid;grid-template-columns:1fr 1.4fr 1.4fr;">
+    <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#f97316,#fb923c);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:microphone" style="font-size:20px;color:#fff;"></iconify-icon>
+          </div>
+          <span style="font-weight:600;font-size:14px;">TTS 语音合成</span>
+        </div>
+        <span style="background:rgba(59,130,246,0.15);color:#60a5fa;font-size:10px;padding:3px 7px;border-radius:4px;">可选配置</span>
+      </div>
+      <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.4;">ElevenLabs、Azure TTS、OpenAI TTS，多语言多音色支持</p>
+      <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(148,163,184,0.1);">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b;">
+          <span>配置复杂度</span>
+          <span style="color:#60a5fa;">● ○ ○ 简单</span>
+        </div>
+        <div style="display:flex;gap:3px;margin-top:5px;">
+          <span style="background:rgba(249,115,22,0.1);color:#fb923c;font-size:9px;padding:2px 6px;border-radius:3px;">多语言</span>
+          <span style="background:rgba(249,115,22,0.1);color:#fb923c;font-size:9px;padding:2px 6px;border-radius:3px;">情感配音</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <iconify-icon icon="mdi:connection" style="font-size:18px;color:#3b82f6;"></iconify-icon>
+        <span style="font-weight:600;font-size:14px;">工具协同机制</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-height:0;overflow:hidden;">
+        <div style="background:rgba(59,130,246,0.08);border-left:3px solid #3b82f6;border-radius:0 5px 5px 0;padding:8px 10px;">
+          <div style="font-size:11px;font-weight:600;">链式调用</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px;">搜索 → 浏览器 → 视觉分析 → 总结</div>
+        </div>
+        <div style="background:rgba(139,92,246,0.08);border-left:3px solid #8b5cf6;border-radius:0 5px 5px 0;padding:8px 10px;">
+          <div style="font-size:11px;font-weight:600;">多模态融合</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px;">图像生成 ↔ 视觉理解 ↔ TTS 语音</div>
+        </div>
+        <div style="background:rgba(20,184,166,0.08);border-left:3px solid #14b8a6;border-radius:0 5px 5px 0;padding:8px 10px;">
+          <div style="font-size:11px;font-weight:600;">上下文共享</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px;">记忆系统打通所有工具的数据流</div>
+        </div>
+        <div style="background:rgba(249,115,22,0.08);border-left:3px solid #f97316;border-radius:0 5px 5px 0;padding:8px 10px;">
+          <div style="font-size:11px;font-weight:600;">并行执行</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px;">独立工具可同时运行提效</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:rgba(15,23,42,0.8);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <iconify-icon icon="mdi:chart-timeline-variant" style="font-size:18px;color:#3b82f6;"></iconify-icon>
+        <span style="font-weight:600;font-size:14px;">工具架构图</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1;min-height:0;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,rgba(59,130,246,0.2),rgba(59,130,246,0.1));border-radius:6px;padding:8px 10px;text-align:center;border:1px solid rgba(59,130,246,0.3);">
+          <span style="font-size:11px;font-weight:600;color:#60a5fa;">🤖 Agent 核心</span>
+        </div>
+        <div style="display:flex;justify-content:center;">
+          <div style="width:2px;height:10px;background:rgba(59,130,246,0.4);"></div>
+        </div>
+        <div style="background:rgba(139,92,246,0.15);border-radius:6px;padding:6px 10px;text-align:center;border:1px solid rgba(139,92,246,0.3);">
+          <span style="font-size:10px;font-weight:600;color:#a78bfa;">📋 工具注册表</span>
+        </div>
+        <div style="display:flex;justify-content:center;">
+          <div style="width:2px;height:10px;background:rgba(139,92,246,0.4);"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;flex:1;">
+          <div style="background:rgba(59,130,246,0.1);border-radius:4px;padding:5px;text-align:center;border:1px solid rgba(59,130,246,0.2);">
+            <div style="font-size:14px;">🔍</div>
+            <div style="font-size:8px;color:#94a3b8;">搜索</div>
+          </div>
+          <div style="background:rgba(139,92,246,0.1);border-radius:4px;padding:5px;text-align:center;border:1px solid rgba(139,92,246,0.2);">
+            <div style="font-size:14px;">🌐</div>
+            <div style="font-size:8px;color:#94a3b8;">浏览器</div>
+          </div>
+          <div style="background:rgba(236,72,153,0.1);border-radius:4px;padding:5px;text-align:center;border:1px solid rgba(236,72,153,0.2);">
+            <div style="font-size:14px;">👁️</div>
+            <div style="font-size:8px;color:#94a3b8;">视觉</div>
+          </div>
+          <div style="background:rgba(20,184,166,0.1);border-radius:4px;padding:5px;text-align:center;border:1px solid rgba(20,184,166,0.2);">
+            <div style="font-size:14px;">🎨</div>
+            <div style="font-size:8px;color:#94a3b8;">图像</div>
+          </div>
+          <div style="background:rgba(249,115,22,0.1);border-radius:4px;padding:5px;text-align:center;border:1px solid rgba(249,115,22,0.2);">
+            <div style="font-size:14px;">🔊</div>
+            <div style="font-size:8px;color:#94a3b8;">TTS</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding-top:8px;border-top:1px solid rgba(148,163,184,0.1);display:flex;gap:6px;flex-wrap:wrap;">
+        <span style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:9px;padding:2px 6px;border-radius:3px;">全工具就绪</span>
+        <span style="background:rgba(59,130,246,0.15);color:#60a5fa;font-size:9px;padding:2px 6px;border-radius:3px;">工具注册表</span>
+        <span style="background:rgba(139,92,246,0.15);color:#a78bfa;font-size:9px;padding:2px 6px;border-radius:3px;">热插拔</span>
+      </div>
+    </div>
+  </div>
+
+  <footer style="display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid rgba(59,130,246,0.2);flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div style="display:flex;align-items:center;gap:5px;">
+        <iconify-icon icon="mdi:lightbulb" style="font-size:14px;color:#fbbf24;"></iconify-icon>
+        <span style="font-size:11px;color:#94a3b8;">工具可按需启用，配置即插即用</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-size:11px;color:#64748b;">核心观点：</span>
+      <span style="background:rgba(59,130,246,0.15);color:#60a5fa;font-size:10px;padding:3px 8px;border-radius:4px;">完整工具链</span>
+      <span style="background:rgba(139,92,246,0.15);color:#a78bfa;font-size:10px;padding:3px 8px;border-radius:4px;">零配置启动</span>
+      <span style="background:rgba(20,184,166,0.15);color:#2dd4bf;font-size:10px;padding:3px 8px;border-radius:4px;">协同增强</span>
+    </div>
+  </footer>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p11" class="deck-page" style="background-color: #0f172a; color: #f1f5f9; min-height: 100vh; width: 100%; font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; padding: 40px 60px; background:#0f172a; color:#f1f5f9;">
+  
+  <!-- Header Section -->
+  <header style="text-align: center; margin-bottom: 30px; flex-shrink: 0;">
+    <h1 style="font-size: 42px; font-weight: 700; color: #3b82f6; margin: 0 0 16px 0; letter-spacing: 2px;">技术架构深度解析</h1>
+    <div style="max-width: 900px; margin: 0 auto; background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(59, 130, 246, 0.05)); border-left: 4px solid #3b82f6; padding: 16px 24px; border-radius: 0 12px 12px 0;">
+      <p style="font-size: 18px; line-height: 1.6; margin: 0; color: #e2e8f0;">Hermes Agent 基于 Agent Loops 编排模式，构建感知→推理→执行→学习的闭环架构，实现 AI Agent 的自我进化与持续优化能力。</p>
+    </div>
+  </header>
+
+  <!-- Main Content Grid -->
+  <main style="flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 20px; min-height: 0;">
+    
+    <!-- Card 1: 分层架构设计 -->
+    <div id="architecture_overview_block" style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #3b82f6, #60a5fa);"></div>
+      <h3 style="color: #3b82f6; font-size: 18px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+        <span style="background: #3b82f6; color: #0f172a; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">01</span>
+        分层架构设计
+      </h3>
+      
+      <!-- Architecture Diagram -->
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 80px; background: #dc2626; padding: 8px 12px; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 600;">应用层</div>
+          <div style="font-size: 12px; color: #94a3b8;">多平台接入 (Telegram/Discord/Slack/CLI)</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 80px; background: #f59e0b; padding: 8px 12px; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 600;">Agent层</div>
+          <div style="font-size: 12px; color: #94a3b8;">核心推理引擎、状态管理、Loops编排</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 80px; background: #10b981; padding: 8px 12px; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 600;">工具层</div>
+          <div style="font-size: 12px; color: #94a3b8;">MCP协议统一接口、200+工具扩展</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 80px; background: #8b5cf6; padding: 8px 12px; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 600;">数据层</div>
+          <div style="font-size: 12px; color: #94a3b8;">向量存储、实体图谱、会话持久化</div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #334155;">
+        <p class="tech-note" style="font-size: 11px; color: #64748b; margin: 0; font-style: italic;">各层职责边界清晰，通过标准化接口通信，支持独立演进与灵活替换。</p>
+      </div>
+    </div>
+
+    <!-- Card 2: Agent Loops 四阶段 -->
+    <div id="component_block" style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #10b981, #34d399);"></div>
+      <h3 style="color: #10b981; font-size: 18px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+        <span style="background: #10b981; color: #0f172a; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">02</span>
+        Agent Loops 四阶段
+      </h3>
+      
+      <!-- Loop Cycle Diagram -->
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+        <svg width="180" height="140" viewBox="0 0 180 140">
+          <!-- Cycle arrows background -->
+          <circle cx="90" cy="70" r="50" fill="none" stroke="#334155" stroke-width="3" stroke-dasharray="8 4"/>
+          
+          <!-- O -->
+          <circle cx="90" cy="20" r="22" fill="#3b82f6" stroke="#60a5fa" stroke-width="2"/>
+          <text x="90" y="25" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">O</text>
+          <text x="90" y="6" text-anchor="middle" fill="#94a3b8" font-size="8">Observe</text>
+          
+          <!-- R -->
+          <circle cx="145" cy="70" r="22" fill="#8b5cf6" stroke="#a78bfa" stroke-width="2"/>
+          <text x="145" y="75" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">R</text>
+          <text x="165" y="75" text-anchor="start" fill="#94a3b8" font-size="8">Reason</text>
+          
+          <!-- A -->
+          <circle cx="90" cy="120" r="22" fill="#f59e0b" stroke="#fbbf24" stroke-width="2"/>
+          <text x="90" y="125" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">A</text>
+          <text x="90" y="145" text-anchor="middle" fill="#94a3b8" font-size="8">Act</text>
+          
+          <!-- L -->
+          <circle cx="35" cy="70" r="22" fill="#10b981" stroke="#34d399" stroke-width="2"/>
+          <text x="35" y="75" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">L</text>
+          <text x="5" y="75" text-anchor="start" fill="#94a3b8" font-size="8">Learn</text>
+          
+          <!-- Arrows -->
+          <path d="M108 28 Q130 45 138 58" fill="none" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrowhead)"/>
+          <path d="M145 92 Q130 110 108 118" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrowhead)"/>
+          <path d="M72 118 Q50 110 35 92" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#arrowhead)"/>
+          <path d="M35 48 Q50 30 72 22" fill="none" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrowhead)"/>
+          
+          <defs>
+            <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <polygon points="0 0, 6 3, 0 6" fill="#94a3b8"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      
+      <div style="margin-top: 8px; padding: 8px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">
+        <p class="tech-note" style="font-size: 11px; color: #10b981; margin: 0;">闭环反馈：Act结果回流至Observe，形成持续学习飞轮</p>
+      </div>
+    </div>
+
+    <!-- Card 3: 数据流与状态机 -->
+    <div id="data_flow_block" style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
+      <h3 style="color: #f59e0b; font-size: 18px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+        <span style="background: #f59e0b; color: #0f172a; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">03</span>
+        数据流与状态机
+      </h3>
+      
+      <!-- Data Flow Diagram -->
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;">
+          <div style="background: #475569; padding: 6px 10px; border-radius: 4px; font-size: 10px;">用户请求</div>
+          <span style="color: #3b82f6;">→</span>
+          <div style="background: #3b82f6; padding: 6px 10px; border-radius: 4px; font-size: 10px;">Context Builder</div>
+          <span style="color: #3b82f6;">→</span>
+          <div style="background: #8b5cf6; padding: 6px 10px; border-radius: 4px; font-size: 10px;">LLM推理</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;">
+          <div style="background: #10b981; padding: 6px 10px; border-radius: 4px; font-size: 10px;">工具调度</div>
+          <span style="color: #3b82f6;">→</span>
+          <div style="background: #f59e0b; padding: 6px 10px; border-radius: 4px; font-size: 10px;">响应聚合</div>
+          <span style="color: #3b82f6;">→</span>
+          <div style="background: #dc2626; padding: 6px 10px; border-radius: 4px; font-size: 10px;">记忆存储</div>
+        </div>
+        
+        <div style="margin-top: 12px; padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px dashed #f59e0b;">
+          <p style="font-size: 11px; color: #f59e0b; margin: 0; text-align: center;">🔧 Context Window 管理</p>
+          <p style="font-size: 10px; color: #94a3b8; margin: 4px 0 0 0; text-align: center;">动态上下文压缩，保持关键信息完整性</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: 持久化记忆系统 -->
+    <div style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #8b5cf6, #a78bfa);"></div>
+      <h3 style="color: #8b5cf6; font-size: 18px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+        <span style="background: #8b5cf6; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">04</span>
+        持久化记忆系统
+      </h3>
+      
+      <!-- Memory Architecture -->
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
+        <div style="display: flex; gap: 10px;">
+          <div style="flex: 1; background: rgba(59, 130, 246, 0.2); padding: 10px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 20px; margin-bottom: 4px;">🔍</div>
+            <div style="font-size: 11px; color: #60a5fa; font-weight: 600;">语义向量库</div>
+            <div style="font-size: 9px; color: #94a3b8;">RAG增强检索</div>
+          </div>
+          <div style="flex: 1; background: rgba(139, 92, 246, 0.2); padding: 10px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 20px; margin-bottom: 4px;">🕸️</div>
+            <div style="font-size: 11px; color: #a78bfa; font-weight: 600;">实体图谱</div>
+            <div style="font-size: 9px; color: #94a3b8;">关系网络</div>
+          </div>
+          <div style="flex: 1; background: rgba(16, 185, 129, 0.2); padding: 10px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 20px; margin-bottom: 4px;">👤</div>
+            <div style="font-size: 11px; color: #34d399; font-weight: 600;">偏好画像</div>
+            <div style="font-size: 9px; color: #94a3b8;">个性学习</div>
+          </div>
+        </div>
+        
+        <div style="padding: 8px 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px; border-left: 3px solid #8b5cf6;">
+          <p class="tech-note" style="font-size: 11px; color: #a78bfa; margin: 0;">跨会话记忆：Agent具备"真正记忆"，非简单KV存储</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 5: 异常处理与容错 -->
+    <div style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #dc2626, #ef4444);"></div>
+      <h3 style="color: #ef4444; font-size: 18px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+        <span style="background: #dc2626; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">05</span>
+        异常处理与容错
+      </h3>
+      
+      <!-- Exception Flow -->
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <div style="background: rgba(220, 38, 38, 0.15); padding: 10px; border-radius: 8px; border: 1px solid rgba(220, 38, 38, 0.3);">
+            <div style="font-size: 12px; color: #f87171; font-weight: 600;">⚡ LLM降级</div>
+            <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">主模型不可用时自动切换备选</div>
+          </div>
+          <div style="background: rgba(245, 158, 11, 0.15); padding: 10px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3);">
+            <div style="font-size: 12px; color: #fbbf24; font-weight: 600;">⏱️ 超时熔断</div>
+            <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">工具执行超时自动终止</div>
+          </div>
+          <div style="background: rgba(59, 130, 246, 0.15); padding: 10px; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3);">
+            <div style="font-size: 12px; color: #60a5fa; font-weight: 600;">🔒 人工确认</div>
+            <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">高风险操作需用户显式授权</div>
+          </div>
+          <div style="background: rgba(16, 185, 129, 0.15); padding: 10px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
+            <div style="font-size: 12px; color: #34d399; font-weight: 600;">🔄 重试机制</div>
+            <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">指数退避处理瞬时失败</div>
+          </div>
+        </div>
+        
+        <div style="padding: 8px 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">
+          <p class="tech-note" style="font-size: 11px; color: #10b981; margin: 0; text-align: center;">🛡️ 可靠性设计：生产级稳定性保障，支持 7×24 运行</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 6: 工具生态接口规范 -->
+    <div style="background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+      <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #06b6d4, #22d3ee);"></div>
+      <h3 style="color: #22d3ee; font-size: 18px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+        <span style="background: #06b6d4; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">06</span>
+        工具生态接口规范
+      </h3>
+      
+      <!-- MCP Protocol Diagram -->
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
+        <div style="background: #0f172a; border: 2px solid #06b6d4; border-radius: 12px; padding: 12px; position: relative;">
+          <div style="position: absolute; top: -10px; left: 16px; background: #06b6d4; padding: 2px 10px; border-radius: 4px; font-size: 10px; font-weight: 700; color: #0f172a;">MCP 协议</div>
+          
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 8px; height: 8px; background: #22d3ee; border-radius: 50%;"></div>
+              <span style="font-size: 11px; color: #e2e8f0;">统一工具描述语言，声明式接入</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 8px; height: 8px; background: #22d3ee; border-radius: 50%;"></div>
+              <span style="font-size: 11px; color: #e2e8f0;">Schema 定义：输入/输出格式标准化</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="width: 8px; height: 8px; background: #22d3ee; border-radius: 50%;"></div>
+              <span style="font-size: 11px; color: #e2e8f0;">权限模型：细粒度工具调用授权控制</span>
+            </div>
+          </div>
+        </div>
+        
+        <div style="padding: 8px 12px; background: rgba(6, 182, 212, 0.1); border-radius: 8px;">
+          <p class="tech-note" style="font-size: 11px; color: #22d3ee; margin: 0; text-align: center;">🚀 扩展能力：开发者可自建MCP Server，无缝集成私有工具</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <span style="background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 14px;">Hermes Agent</span>
+      <span style="color: #64748b; font-size: 12px;">|</span>
+      <span style="color: #64748b; font-size: 12px;">模块化 · 可扩展 · 可定制</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <span style="background: #1e293b; padding: 4px 12px; border-radius: 20px; font-size: 11px; color: #94a3b8;">核心架构设计</span>
+      <span style="background: #3b82f6; padding: 4px 12px; border-radius: 20px; font-size: 11px; color: #fff;">Agent Loops</span>
+    </div>
+  </footer>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p12" class="deck-page" style="width:100%;height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:20px;overflow:hidden; background:#0f172a; color:#f1f5f9;">
+  <!-- 页面标题 -->
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;">
+    <div style="width:4px;height:36px;background:var(--accent);border-radius:2px;"></div>
+    <div>
+      <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--text);">框架对比分析</h1>
+      <p style="margin:4px 0 0;font-size:14px;color:#94a3b8;">与主流 Agent 框架横向对比 · 客观评估差异化价值</p>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;">
+      <span class="s-badge" style="background:rgba(59,130,246,0.2);color:#3b82f6;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;">
+        <iconify-icon icon="mdi:lightning-bolt" style="font-size:14px;vertical-align:-2px;margin-right:4px;"></iconify-icon>竞品分析
+      </span>
+    </div>
+  </div>
+
+  <!-- 对比表格区块 -->
+  <div class="s-card" style="flex:1;padding:20px;background:rgba(30,41,59,0.6);border:1px solid rgba(148,163,184,0.1);border-radius:12px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <iconify-icon icon="mdi:table" style="font-size:20px;color:var(--accent);"></iconify-icon>
+      <h2 style="margin:0;font-size:16px;font-weight:600;">功能维度对比</h2>
+    </div>
+    <table class="s-table" style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:rgba(59,130,246,0.1);">
+          <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--accent);border-bottom:2px solid rgba(59,130,246,0.3);width:18%;">对比维度</th>
+          <th style="padding:12px 16px;text-align:center;font-weight:700;border-bottom:2px solid rgba(59,130,246,0.5);width:20.5%;color:#3b82f6;background:rgba(59,130,246,0.08);">
+            <iconify-icon icon="ph:brain" style="font-size:14px;vertical-align:-2px;margin-right:4px;"></iconify-icon>Hermes Agent
+          </th>
+          <th style="padding:12px 16px;text-align:center;font-weight:600;border-bottom:1px solid rgba(148,163,184,0.1);width:20.5%;color:#94a3b8;">AutoGPT</th>
+          <th style="padding:12px 16px;text-align:center;font-weight:600;border-bottom:1px solid rgba(148,163,184,0.1);width:20.5%;color:#94a3b8;">LangChain</th>
+          <th style="padding:12px 16px;text-align:center;font-weight:600;border-bottom:1px solid rgba(148,163,184,0.1);width:20.5%;color:#94a3b8;">CrewAI</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:12px 16px;border-bottom:1px solid rgba(148,163,184,0.08);font-weight:600;">
+            <iconify-icon icon="mdi:memory" style="font-size:16px;color:#22c55e;vertical-align:-2px;margin-right:6px;"></iconify-icon>持久化记忆
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);background:rgba(59,130,246,0.05);">
+            <span class="s-badge" style="background:rgba(34,197,94,0.2);color:#22c55e;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;">原生支持</span>
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">需自行实现</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">部分支持</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">不支持</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;border-bottom:1px solid rgba(148,163,184,0.08);font-weight:600;">
+            <iconify-icon icon="mdi:Auto-Fix" style="font-size:16px;color:#f59e0b;vertical-align:-2px;margin-right:6px;"></iconify-icon>技能自生成
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);background:rgba(59,130,246,0.05);">
+            <span class="s-badge" style="background:rgba(34,197,94,0.2);color:#22c55e;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;">自动构建</span>
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#ef4444;">不支持</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">不支持</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">不支持</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;border-bottom:1px solid rgba(148,163,184,0.08);font-weight:600;">
+            <iconify-icon icon="mdi:monitor-cellphone" style="font-size:16px;color:#8b5cf6;vertical-align:-2px;margin-right:6px;"></iconify-icon>多平台统一
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);background:rgba(59,130,246,0.05);">
+            <span class="s-badge" style="background:rgba(34,197,94,0.2);color:#22c55e;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;">5+ 平台</span>
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">仅 Web</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">无原生</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">无原生</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;border-bottom:1px solid rgba(148,163,184,0.08);font-weight:600;">
+            <iconify-icon icon="mdi:brain" style="font-size:16px;color:#ec4899;vertical-align:-2px;margin-right:6px;"></iconify-icon>模型支持
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);background:rgba(59,130,246,0.05);">
+            <span style="color:#3b82f6;font-weight:700;">200+</span> 模型
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">OpenAI</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">多模型</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">多模型</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;border-bottom:1px solid rgba(148,163,184,0.08);font-weight:600;">
+            <iconify-icon icon="mdi:github" style="font-size:16px;color:#f1f5f9;vertical-align:-2px;margin-right:6px;"></iconify-icon>开源状态
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);background:rgba(59,130,246,0.05);">
+            <span class="s-badge" style="background:rgba(139,92,246,0.2);color:#8b5cf6;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;">MIT</span>
+          </td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">MIT</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">MIT</td>
+          <td style="padding:12px 16px;text-align:center;border-bottom:1px solid rgba(148,163,184,0.08);color:#94a3b8;">MIT</td>
+        </tr>
+        <tr>
+          <td style="padding:12px 16px;font-weight:600;">
+            <iconify-icon icon="mdi:rocket-launch" style="font-size:16px;color:#f97316;vertical-align:-2px;margin-right:6px;"></iconify-icon>部署难度
+          </td>
+          <td style="padding:12px 16px;text-align:center;background:rgba(59,130,246,0.05);">
+            <span class="s-badge" style="background:rgba(34,197,94,0.2);color:#22c55e;padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;">低</span>
+          </td>
+          <td style="padding:12px 16px;text-align:center;color:#f59e0b;">中</td>
+          <td style="padding:12px 16px;text-align:center;color:#f59e0b;">高</td>
+          <td style="padding:12px 16px;text-align:center;color:#94a3b8;">中</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 底部双区块：优势高亮 + 局限性说明 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <!-- 核心优势卡片 -->
+    <div class="s-card s-card-hover" style="padding:20px;background:linear-gradient(135deg,rgba(59,130,246,0.15) 0%,rgba(139,92,246,0.1) 100%);border:1px solid rgba(59,130,246,0.3);border-radius:12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <div style="width:32px;height:32px;background:rgba(59,130,246,0.3);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+          <iconify-icon icon="mdi:trophy-variant" style="font-size:18px;color:#3b82f6;"></iconify-icon>
+        </div>
+        <h3 style="margin:0;font-size:15px;font-weight:700;color:var(--text);">Hermes Agent 核心优势</h3>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="s-alert" style="padding:12px;background:rgba(30,41,59,0.5);border-radius:8px;border-left:3px solid #22c55e;">
+          <div style="font-size:12px;color:#22c55e;font-weight:600;margin-bottom:4px;">持久化记忆</div>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.4;">跨会话学习用户偏好<br/>自动构建个性化知识库</div>
+        </div>
+        <div class="s-alert" style="padding:12px;background:rgba(30,41,59,0.5);border-radius:8px;border-left:3px solid #f59e0b;">
+          <div style="font-size:12px;color:#f59e0b;font-weight:600;margin-bottom:4px;">技能自生成</div>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.4;">从工作流自动构建工具<br/>减少 80% 重复开发</div>
+        </div>
+        <div class="s-alert" style="padding:12px;background:rgba(30,41,59,0.5);border-radius:8px;border-left:3px solid #8b5cf6;">
+          <div style="font-size:12px;color:#8b5cf6;font-weight:600;margin-bottom:4px;">多平台统一</div>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.4;">Telegram/Discord/Slack<br/>统一的 Agent 体验</div>
+        </div>
+        <div class="s-alert" style="padding:12px;background:rgba(30,41,59,0.5);border-radius:8px;border-left:3px solid #3b82f6;">
+          <div style="font-size:12px;color:#3b82f6;font-weight:600;margin-bottom:4px;">200+ 模型支持</div>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.4;">OpenRouter/Ollama<br/>灵活切换降本增效</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 局限性说明 & 适用场景 -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- 局限性说明 -->
+      <div class="s-card" style="flex:1;padding:16px;background:rgba(30,41,59,0.4);border:1px solid rgba(148,163,184,0.1);border-radius:12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <iconify-icon icon="mdi:alert-circle" style="font-size:16px;color:#f59e0b;"></iconify-icon>
+          <h4 style="margin:0;font-size:13px;font-weight:600;color:#f59e0b;">客观局限性说明</h4>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;line-height:1.6;">
+          <div style="margin-bottom:6px;"><span style="color:#f1f5f9;font-weight:500;">• 成熟度:</span> 项目较新，生态仍在快速迭代中</div>
+          <div style="margin-bottom:6px;"><span style="color:#f1f5f9;font-weight:500;">• 企业级:</span> 暂无大规模生产环境验证案例</div>
+          <div><span style="color:#f1f5f9;font-weight:500;">• 复杂度:</span> Agent Loop 机制对新手有一定学习成本</div>
+        </div>
+      </div>
+
+      <!-- 适用场景推荐 -->
+      <div class="s-card" style="flex:1;padding:16px;background:rgba(30,41,59,0.4);border:1px solid rgba(148,163,184,0.1);border-radius:12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <iconify-icon icon="mdi:target" style="font-size:16px;color:#22c55e;"></iconify-icon>
+          <h4 style="margin:0;font-size:13px;font-weight:600;color:#22c55e;">推荐选型场景</h4>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <span class="s-badge" style="background:rgba(59,130,246,0.2);color:#3b82f6;padding:6px 10px;border-radius:6px;font-size:11px;">个人助手</span>
+          <span class="s-badge" style="background:rgba(139,92,246,0.2);color:#8b5cf6;padding:6px 10px;border-radius:6px;font-size:11px;">跨平台机器人</span>
+          <span class="s-badge" style="background:rgba(34,197,94,0.2);color:#22c55e;padding:6px 10px;border-radius:6px;font-size:11px;">长程记忆需求</span>
+          <span class="s-badge" style="background:rgba(236,72,153,0.2);color:#ec4899;padding:6px 10px;border-radius:6px;font-size:11px;">快速原型</span>
+          <span class="s-badge" style="background:rgba(251,146,60,0.2);color:#f97316;padding:6px 10px;border-radius:6px;font-size:11px;">多模型实验</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页脚 -->
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid rgba(148,163,184,0.1);">
+    <div style="font-size:11px;color:#64748b;">数据来源: Nous Research 官方文档 / GitHub / 各框架公开资料 · 截止 2025年1月</div>
+    <div style="font-size:11px;color:#64748b;"><span style="color:var(--accent);">12</span> / 13</div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p13" class="deck-page" style="width:100%;height:100%;background:#0f172a; color:#f1f5f9;font-family:'Segoe UI',system-ui,sans-serif;padding:28px 48px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:4px;height:26px;background:#3b82f6;border-radius:2px;"></div>
+      <h1 style="font-size:22px;font-weight:700;margin:0;letter-spacing:-0.5px;">实战应用场景</h1>
+    </div>
+    <div style="background:rgba(59,130,246,0.15);color:#3b82f6;padding:5px 12px;font-size:12px;border-radius:20px;">
+      <iconify-icon icon="mdi:rocket-launch" width="13" height="13" style="vertical-align:-2px;margin-right:3px;"></iconify-icon>
+      Page 09
+    </div>
+  </div>
+  
+  <!-- Subtitle -->
+  <div style="font-size:14px;color:#94a3b8;margin-left:16px;">四大核心场景 — 从个人效率到团队协作</div>
+
+  <!-- Main Content Grid -->
+  <div style="flex:1;gap:14px;display:grid;grid-template-columns:repeat(4,1fr);min-height:0;">
+    <!-- 场景1: 个人助手 -->
+    <div style="background:rgba(30,41,59,0.7);border:1px solid rgba(59,130,246,0.2);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;">
+      <div style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(59,130,246,0.04));padding:14px 14px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:34px;height:34px;background:rgba(59,130,246,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:account-circle" width="20" height="20" style="color:#3b82f6;"></iconify-icon>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;">个人智能助手</div>
+            <div style="font-size:11px;color:#64748b;">Personal Assistant</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
+          打造专属的第二大脑，跨会话持久记忆用户偏好、学习习惯与关键信息
+        </div>
+      </div>
+      <div style="padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(59,130,246,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:calendar-check" width="14" height="14" style="color:#3b82f6;flex-shrink:0;"></iconify-icon>
+          日程管理与智能提醒
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(59,130,246,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:search-web" width="14" height="14" style="color:#3b82f6;flex-shrink:0;"></iconify-icon>
+          个性化信息检索与摘要
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(59,130,246,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:brain" width="14" height="14" style="color:#3b82f6;flex-shrink:0;"></iconify-icon>
+          持续学习用户表达习惯
+        </div>
+        <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="text-align:center;">
+            <div style="font-size:20px;color:#3b82f6;font-weight:700;">100%</div>
+            <div style="font-size:10px;color:#64748b;">全天候可用</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 场景2: 技术开发 -->
+    <div style="background:rgba(30,41,59,0.7);border:1px solid rgba(168,85,247,0.2);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;">
+      <div style="background:linear-gradient(135deg,rgba(168,85,247,0.15),rgba(168,85,247,0.04));padding:14px 14px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:34px;height:34px;background:rgba(168,85,247,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:code-braces" width="20" height="20" style="color:#a855f7;"></iconify-icon>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;">技术开发伙伴</div>
+            <div style="font-size:11px;color:#64748b;">Developer Companion</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
+          代码助手 + 文档助手，支持多语言、框架与200+ LLM后端自由切换
+        </div>
+      </div>
+      <div style="padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(168,85,247,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:console" width="14" height="14" style="color:#a855f7;flex-shrink:0;"></iconify-icon>
+          CLI 终端无缝集成
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(168,85,247,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:book-open-page-variant" width="14" height="14" style="color:#a855f7;flex-shrink:0;"></iconify-icon>
+          项目文档智能解析
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(168,85,247,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:swap-horizontal" width="14" height="14" style="color:#a855f7;flex-shrink:0;"></iconify-icon>
+          模型灵活切换对比测试
+        </div>
+        <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="text-align:center;">
+            <div style="font-size:20px;color:#a855f7;font-weight:700;">200+</div>
+            <div style="font-size:10px;color:#64748b;">LLM 模型支持</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 场景3: 团队协作 -->
+    <div style="background:rgba(30,41,59,0.7);border:1px solid rgba(34,197,94,0.2);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;">
+      <div style="background:linear-gradient(135deg,rgba(34,197,94,0.15),rgba(34,197,94,0.04));padding:14px 14px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:34px;height:34px;background:rgba(34,197,94,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:account-group" width="20" height="20" style="color:#22c55e;"></iconify-icon>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;">团队协作中枢</div>
+            <div style="font-size:11px;color:#64748b;">Team Collaboration Hub</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
+          多平台消息聚合，跨 Discord / Slack / Telegram 统一管理团队知识
+        </div>
+      </div>
+      <div style="padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(34,197,94,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:message-flash" width="14" height="14" style="color:#22c55e;flex-shrink:0;"></iconify-icon>
+          多平台消息统一接入
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(34,197,94,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:database" width="14" height="14" style="color:#22c55e;flex-shrink:0;"></iconify-icon>
+          团队知识库沉淀共享
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(34,197,94,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:history" width="14" height="14" style="color:#22c55e;flex-shrink:0;"></iconify-icon>
+          会话历史持久化存档
+        </div>
+        <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="text-align:center;">
+            <div style="font-size:20px;color:#22c55e;font-weight:700;">5+</div>
+            <div style="font-size:10px;color:#64748b;">主流平台覆盖</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 场景4: 智能自动化 -->
+    <div style="background:rgba(30,41,59,0.7);border:1px solid rgba(239,68,68,0.2);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;">
+      <div style="background:linear-gradient(135deg,rgba(239,68,68,0.15),rgba(239,68,68,0.04));padding:14px 14px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:34px;height:34px;background:rgba(239,68,68,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+            <iconify-icon icon="mdi:robot" width="20" height="20" style="color:#ef4444;"></iconify-icon>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;">智能自动化</div>
+            <div style="font-size:11px;color:#64748b;">Workflow Automation</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#94a3b8;line-height:1.5;">
+          浏览器自动化 + 多模态工具链，复杂任务自动分解执行并反馈结果
+        </div>
+      </div>
+      <div style="padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(239,68,68,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:web" width="14" height="14" style="color:#ef4444;flex-shrink:0;"></iconify-icon>
+          网页浏览与数据抓取
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(239,68,68,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:image" width="14" height="14" style="color:#ef4444;flex-shrink:0;"></iconify-icon>
+          图像生成与视觉理解
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;padding:7px 10px;background:rgba(239,68,68,0.08);border-radius:6px;">
+          <iconify-icon icon="mdi:headphones" width="14" height="14" style="color:#ef4444;flex-shrink:0;"></iconify-icon>
+          语音合成(TTS)交互
+        </div>
+        <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="text-align:center;">
+            <div style="font-size:20px;color:#ef4444;font-weight:700;">15+</div>
+            <div style="font-size:10px;color:#64748b;">内置工具支持</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Comparison Section -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <!-- 传统方案痛点 -->
+    <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(239,68,68,0.15);border-radius:10px;padding:14px 18px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:close-circle" width="18" height="18" style="color:#ef4444;"></iconify-icon>
+        <span style="font-size:14px;font-weight:600;color:#ef4444;">传统方案痛点</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;">
+          <iconify-icon icon="mdi:circle-small" width="14" height="14" style="color:#64748b;"></iconify-icon>
+          无持久记忆，每次会话从头开始
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;">
+          <iconify-icon icon="mdi:circle-small" width="14" height="14" style="color:#64748b;"></iconify-icon>
+          单一平台，跨服务协作困难
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;">
+          <iconify-icon icon="mdi:circle-small" width="14" height="14" style="color:#64748b;"></iconify-icon>
+          模型固定，无法灵活切换
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#94a3b8;">
+          <iconify-icon icon="mdi:circle-small" width="14" height="14" style="color:#64748b;"></iconify-icon>
+          工具链薄弱，复杂任务受限
+        </div>
+      </div>
+    </div>
+
+    <!-- Hermes Agent 优势 -->
+    <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(34,197,94,0.15);border-radius:10px;padding:14px 18px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:check-circle" width="18" height="18" style="color:#22c55e;"></iconify-icon>
+        <span style="font-size:14px;font-weight:600;color:#22c55e;">Hermes Agent 优势</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1;">
+          <iconify-icon icon="mdi:arrow-right" width="12" height="12" style="color:#22c55e;"></iconify-icon>
+          持久记忆，越用越懂你
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1;">
+          <iconify-icon icon="mdi:arrow-right" width="12" height="12" style="color:#22c55e;"></iconify-icon>
+          多平台统一，覆盖主流IM
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1;">
+          <iconify-icon icon="mdi:arrow-right" width="12" height="12" style="color:#22c55e;"></iconify-icon>
+          200+模型自由切换按需选择
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1;">
+          <iconify-icon icon="mdi:arrow-right" width="12" height="12" style="color:#22c55e;"></iconify-icon>
+          丰富工具生态，复杂任务自动化
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer: Q&A + Data Note -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
+    <div style="font-size:12px;color:#475569;">
+      <span style="color:#3b82f6;font-weight:600;">Q&A</span> · 欢迎提问交流
+    </div>
+    <div style="font-size:11px;color:#64748b;font-style:italic;">
+      * 数据为行业估算值，实际效果因使用场景而异
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage">
+<style data-overflow-fix>
+  /* 自动修复: 强制内容适配 16:9 单页画布 */
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    width: 100vw; height: 100vh;
+  }
+  body > *:first-child,
+  [data-page-id],
+  section {
+    max-height: 100vh !important;
+    overflow: hidden !important;
+    box-sizing: border-box;
+  }
+  /* 缩小底部间距和字号防止溢出 */
+  body {
+    font-size: clamp(12px, 1.4vw, 18px);
+  }
+  h1, h2, h3 { margin-top: 0.3em; margin-bottom: 0.2em; }
+  p, li { margin-top: 0.15em; margin-bottom: 0.15em; line-height: 1.4; }
+  table { font-size: 0.9em; }
+  .card, .stat-card, [class*=card] {
+    padding: 0.5em !important;
+    margin: 0.3em !important;
+  }
+</style>
+<section data-page-id="p14" class="deck-page" style="width:100%;height:100%;background:#0f172a;color:#f1f5f9;font-family:'Segoe UI',system-ui,sans-serif;padding:28px 48px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow:hidden;">
+<div style="display:flex;align-items:center;gap:14px;margin-bottom:2px;">
+<iconify-icon icon="mdi:rocket-launch" style="font-size:32px;color:#3b82f6;"></iconify-icon>
+<h1 style="font-size:28px;font-weight:700;margin:0;color:#f1f5f9;">快速上手指南</h1>
+<span class="s-badge" style="background:#3b82f6;color:#fff;font-size:12px;padding:3px 10px;border-radius:20px;">5分钟启动</span>
+</div>
+<p style="font-size:14px;color:#94a3b8;margin:0;">从 pip install 到运行只需三个步骤，支持 200+ LLM 模型</p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex:1;min-height:0;">
+<div style="display:flex;flex-direction:column;gap:14px;">
+<div class="s-card" style="padding:18px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:10px;">
+<h3 style="font-size:16px;font-weight:600;margin:0 0 12px 0;color:#3b82f6;display:flex;align-items:center;gap:8px;">
+<iconify-icon icon="mdi:install" style="font-size:20px;"></iconify-icon>安装步骤
+</h3>
+<div style="display:flex;flex-direction:column;gap:10px;">
+<div style="display:flex;align-items:flex-start;gap:10px;">
+<span style="background:#3b82f6;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">1</span>
+<div>
+<p style="margin:0;font-weight:600;font-size:14px;">安装 Hermes Agent</p>
+<p style="margin:2px 0 0 0;font-size:12px;color:#94a3b8;"><code style="background:#1e293b;padding:1px 6px;border-radius:4px;font-family:'Fira Code','Consolas',monospace;font-size:11px;">pip install hermes-agent</code></p>
+</div>
+</div>
+<div style="display:flex;align-items:flex-start;gap:10px;">
+<span style="background:#3b82f6;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">2</span>
+<div>
+<p style="margin:0;font-weight:600;font-size:14px;">配置 API Key</p>
+<p style="margin:2px 0 0 0;font-size:12px;color:#94a3b8;">设置 <code style="background:#1e293b;padding:1px 6px;border-radius:4px;font-family:'Fira Code','Consolas',monospace;font-size:11px;">OPENAI_API_KEY</code> 或 OpenRouter key</p>
+</div>
+</div>
+<div style="display:flex;align-items:flex-start;gap:10px;">
+<span style="background:#3b82f6;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">3</span>
+<div>
+<p style="margin:0;font-weight:600;font-size:14px;">启动运行</p>
+<p style="margin:2px 0 0 0;font-size:12px;color:#94a3b8;">选择平台模式一键启动</p>
+</div>
+</div>
+</div>
+</div>
+<div class="s-card" style="padding:16px;background:rgba(15,23,42,0.8);border:1px solid rgba(148,163,184,0.2);border-radius:10px;flex:1;overflow:hidden;">
+<h3 style="font-size:15px;font-weight:600;margin:0 0 10px 0;color:#f1f5f9;display:flex;align-items:center;gap:8px;">
+<iconify-icon icon="mdi:code-braces" style="font-size:18px;color:#3b82f6;"></iconify-icon>配置文件示例
+</h3>
+<pre style="background:#1e293b;padding:12px;border-radius:6px;font-family:'Fira Code','Consolas',monospace;font-size:11px;line-height:1.6;margin:0;overflow-x:auto;"><code><span style="color:#94a3b8;"># config.yaml</span>
+<span style="color:#fbbf24;">llm:</span> <span style="color:#22c55e;">openai</span>
+<span style="color:#fbbf24;">api_key:</span> <span style="color:#22c55e;">your-key-here</span>
+<span style="color:#94a3b8;"># Docker 挂载配置</span>
+<span style="color:#3b82f6;">./config:/app/config</span></code></pre>
+<h3 style="font-size:15px;font-weight:600;margin:12px 0 10px 0;color:#f1f5f9;display:flex;align-items:center;gap:8px;">
+<iconify-icon icon="mdi:console" style="font-size:18px;color:#3b82f6;"></iconify-icon>快速启动命令
+</h3>
+<div style="background:#1e293b;padding:12px;border-radius:6px;font-family:'Fira Code','Consolas',monospace;font-size:11px;line-height:1.5;">
+<div style="color:#94a3b8;"># 安装</div>
+<div style="color:#22c55e;">pip install hermes-agent</div>
+<div style="margin-top:6px;color:#94a3b8;"># 配置环境变量</div>
+<div style="color:#fbbf24;">export OPENAI_API_KEY=sk-xxx</div>
+<div style="margin-top:6px;color:#94a3b8;"># 启动 CLI 模式</div>
+<div style="color:#3b82f6;">hermes run --mode cli</div>
+<div style="margin-top:6px;color:#94a3b8;"># 或启动 Telegram Bot</div>
+<div style="color:#3b82f6;">hermes run --mode telegram</div>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px;">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+<div class="s-card" style="padding:14px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:8px;text-align:center;">
+<iconify-icon icon="mdi:check-circle" style="font-size:24px;color:#22c55e;"></iconify-icon>
+<p style="margin:6px 0 0 0;font-size:13px;font-weight:600;">🟢 Python ≥ 3.10</p>
+<p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">环境要求</p>
+</div>
+<div class="s-card" style="padding:14px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:8px;text-align:center;">
+<iconify-icon icon="mdi:lightning-bolt" style="font-size:24px;color:#fbbf24;"></iconify-icon>
+<p style="margin:6px 0 0 0;font-size:13px;font-weight:600;">⚡ 200+ 模型</p>
+<p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">多后端支持</p>
+</div>
+<div class="s-card" style="padding:14px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:8px;text-align:center;">
+<iconify-icon icon="mdi:account-group" style="font-size:24px;color:#a78bfa;"></iconify-icon>
+<p style="margin:6px 0 0 0;font-size:13px;font-weight:600;">👥 多平台</p>
+<p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">Telegram/Discord</p>
+</div>
+<div class="s-card" style="padding:14px;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:8px;text-align:center;">
+<iconify-icon icon="mdi:brain" style="font-size:24px;color:#f472b6;"></iconify-icon>
+<p style="margin:6px 0 0 0;font-size:13px;font-weight:600;">🧠 持久记忆</p>
+<p style="margin:2px 0 0 0;font-size:11px;color:#94a3b8;">跨会话学习</p>
+</div>
+</div>
+<div class="s-card s-alert-warn" style="padding:14px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:8px;">
+<h4 style="margin:0 0 8px 0;font-size:13px;font-weight:600;color:#fbbf24;display:flex;align-items:center;gap:6px;">
+<iconify-icon icon="mdi:alert-circle" style="font-size:16px;"></iconify-icon>常见问题
+</h4>
+<div style="font-size:12px;color:#94a3b8;line-height:1.5;">
+<p style="margin:0 0 4px 0;">• <strong style="color:#f1f5f9;">API Key 无效</strong>：检查 <code style="background:#1e293b;padding:1px 5px;border-radius:3px;font-family:'Fira Code','Consolas',monospace;font-size:11px;">key</code> 格式和额度</p>
+<p style="margin:0 0 4px 0;">• <strong style="color:#f1f5f9;">连接超时</strong>：网络代理或防火墙问题</p>
+<p style="margin:0;">• <strong style="color:#f1f5f9;">模型不支持</strong>：确认后端配置正确</p>
+</div>
+</div>
+<div class="s-card" style="padding:14px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:8px;">
+<h4 style="margin:0 0 8px 0;font-size:13px;font-weight:600;color:#22c55e;display:flex;align-items:center;gap:6px;">
+<iconify-icon icon="mdi:book-open-page-variant" style="font-size:16px;"></iconify-icon>完整文档
+</h4>
+<div style="display:flex;flex-wrap:wrap;gap:6px;">
+<span style="font-size:11px;color:#94a3b8;background:#1e293b;padding:3px 8px;border-radius:4px;">📘 官方文档 →</span>
+<span style="font-size:11px;color:#94a3b8;background:#1e293b;padding:3px 8px;border-radius:4px;">🐙 GitHub →</span>
+<span style="font-size:11px;color:#94a3b8;background:#1e293b;padding:3px 8px;border-radius:4px;">💬 Discord →</span>
+</div>
+</div>
+<div style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(167,139,250,0.15));border:1px solid rgba(59,130,246,0.3);border-radius:10px;padding:16px;display:flex;align-items:center;gap:16px;">
+<iconify-icon icon="mdi:rocket" style="font-size:36px;color:#3b82f6;"></iconify-icon>
+<div style="flex:1;min-width:0;">
+<p style="margin:0;font-size:14px;font-weight:700;color:#f1f5f9;">下一步：探索高级功能</p>
+<p style="margin:4px 0 0 0;font-size:12px;color:#94a3b8;">配置持久记忆 → 集成自定义工具 → 构建专属 Agent 工作流</p>
+<div style="margin-top:8px;">
+<a href="#" style="font-size:12px;color:#3b82f6;text-decoration:none;font-weight:600;background:rgba(59,130,246,0.15);padding:4px 12px;border-radius:4px;display:inline-block;">查看详细文档 →</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p15" class="deck-page" style="width:100%;height:100%;background:#0f172a;color:#f1f5f9;font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box; background:#0f172a; color:#f1f5f9;">
+
+  <!-- 顶部标题区 -->
+  <div style="padding:28px 48px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(59,130,246,0.2);flex-shrink:0;">
+    <div>
+      <h1 style="margin:0;font-size:26px;font-weight:700;color:#f1f5f9;letter-spacing:1px;">总结与未来展望</h1>
+      <p style="margin:6px 0 0;font-size:13px;color:#94a3b8;">Hermes Agent · 开启自我进化的 AI Agent 新范式</p>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <span class="s-badge" style="background:rgba(59,130,246,0.15);color:#3b82f6;font-size:11px;padding:4px 10px;border-radius:4px;border:1px solid rgba(59,130,246,0.3);">v1.0 正式发布</span>
+      <span class="s-badge" style="background:rgba(34,197,94,0.15);color:#22c55e;font-size:11px;padding:4px 10px;border-radius:4px;border:1px solid rgba(34,197,94,0.3);">开源活跃</span>
+    </div>
+  </div>
+
+  <!-- 主体内容区 -->
+  <div style="flex:1;display:flex;gap:24px;padding:20px 48px;min-height:0;">
+
+    <!-- 左侧：Summary Block -->
+    <div style="width:42%;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <iconify-icon icon="mdi:star-four-points" style="color:#3b82f6;font-size:18px;"></iconify-icon>
+        <span style="font-size:14px;font-weight:600;color:#f1f5f9;">核心价值总结</span>
+      </div>
+
+      <!-- 三个核心价值卡片 -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="s-card" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);padding:14px 16px;border-radius:8px;flex:1;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <iconify-icon icon="mdi:brain" style="color:#3b82f6;font-size:24px;flex-shrink:0;margin-top:2px;"></iconify-icon>
+            <div>
+              <h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#f1f5f9;">持久化记忆系统</h3>
+              <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">跨会话学习用户偏好，自动积累知识图谱，实现真正的个性化 AI 伙伴</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="s-card" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);padding:14px 16px;border-radius:8px;flex:1;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <iconify-icon icon="mdi:lan-connect" style="color:#3b82f6;font-size:24px;flex-shrink:0;margin-top:2px;"></iconify-icon>
+            <div>
+              <h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#f1f5f9;">多平台无缝集成</h3>
+              <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">覆盖 Telegram/Discord/Slack/WhatsApp/CLI 等主流平台，随时随地调用</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="s-card" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);padding:14px 16px;border-radius:8px;flex:1;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <iconify-icon icon="mdi:rocket-launch" style="color:#3b82f6;font-size:24px;flex-shrink:0;margin-top:2px;"></iconify-icon>
+            <div>
+              <h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#f1f5f9;">200+ 模型生态</h3>
+              <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;">兼容 OpenRouter/Ollama/OpenAI 等多后端，灵活切换、成本可控</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 技术亮点统计 -->
+      <div style="display:flex;gap:12px;margin-top:4px;">
+        <div class="s-stat" style="flex:1;text-align:center;background:rgba(30,41,59,0.6);padding:12px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.1);">
+          <div class="s-stat-value" style="font-size:22px;font-weight:700;color:#3b82f6;">200+</div>
+          <div class="s-stat-label" style="font-size:11px;color:#64748b;margin-top:2px;">支持模型</div>
+        </div>
+        <div class="s-stat" style="flex:1;text-align:center;background:rgba(30,41,59,0.6);padding:12px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.1);">
+          <div class="s-stat-value" style="font-size:22px;font-weight:700;color:#3b82f6;">5+</div>
+          <div class="s-stat-label" style="font-size:11px;color:#64748b;margin-top:2px;">集成平台</div>
+        </div>
+        <div class="s-stat" style="flex:1;text-align:center;background:rgba(30,41,59,0.6);padding:12px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.1);">
+          <div class="s-stat-value" style="font-size:22px;font-weight:700;color:#3b82f6;">MIT</div>
+          <div class="s-stat-label" style="font-size:11px;color:#64748b;margin-top:2px;">开源协议</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：Roadmap Block -->
+    <div style="flex:1;display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <iconify-icon icon="mdi:map-marker-path" style="color:#3b82f6;font-size:18px;"></iconify-icon>
+        <span style="font-size:14px;font-weight:600;color:#f1f5f9;">发展路线图</span>
+      </div>
+
+      <!-- 时间线容器 -->
+      <div style="position:relative;flex:1;display:flex;flex-direction:column;gap:12px;padding-left:24px;">
+        <!-- 时间线竖线 -->
+        <div style="position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:linear-gradient(to bottom, #3b82f6 0%, rgba(59,130,246,0.3) 50%, rgba(59,130,246,0.1) 100%);border-radius:1px;"></div>
+
+        <!-- Q2 2025 - 进行中 -->
+        <div style="display:flex;align-items:flex-start;gap:16px;position:relative;">
+          <div style="width:16px;height:16px;background:#3b82f6;border-radius:50%;flex-shrink:0;margin-left:-24px;margin-top:4px;box-shadow:0 0 8px rgba(59,130,246,0.5);z-index:1;"></div>
+          <div class="s-card" style="flex:1;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.4);padding:12px 14px;border-radius:8px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <span style="font-size:12px;font-weight:600;color:#3b82f6;">Q2 2025</span>
+              <span class="s-badge" style="background:rgba(34,197,94,0.2);color:#22c55e;font-size:10px;padding:2px 8px;border-radius:3px;">进行中</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="font-size:11px;color:#cbd5e1;background:rgba(30,41,59,0.8);padding:4px 8px;border-radius:4px;">多模态工具链</span>
+              <span style="font-size:11px;color:#cbd5e1;background:rgba(30,41,59,0.8);padding:4px 8px;border-radius:4px;">Memory v2</span>
+              <span style="font-size:11px;color:#cbd5e1;background:rgba(30,41,59,0.8);padding:4px 8px;border-radius:4px;">Web UI</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Q3 2025 - 规划中 -->
+        <div style="display:flex;align-items:flex-start;gap:16px;position:relative;">
+          <div style="width:16px;height:16px;background:transparent;border:2px dashed rgba(59,130,246,0.5);border-radius:50%;flex-shrink:0;margin-left:-24px;margin-top:4px;z-index:1;"></div>
+          <div class="s-card" style="flex:1;background:rgba(30,41,59,0.4);border:1px dashed rgba(59,130,246,0.3);padding:12px 14px;border-radius:8px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <span style="font-size:12px;font-weight:600;color:#64748b;">Q3 2025</span>
+              <span class="s-badge" style="background:rgba(100,116,139,0.2);color:#94a3b8;font-size:10px;padding:2px 8px;border-radius:3px;">规划中</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="font-size:11px;color:#64748b;background:rgba(30,41,59,0.6);padding:4px 8px;border-radius:4px;">iOS/Android App</span>
+              <span style="font-size:11px;color:#64748b;background:rgba(30,41,59,0.6);padding:4px 8px;border-radius:4px;">企业版 SDK</span>
+              <span style="font-size:11px;color:#64748b;background:rgba(30,41,59,0.6);padding:4px 8px;border-radius:4px;">API Gateway</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Q4 2025 - 规划中 -->
+        <div style="display:flex;align-items:flex-start;gap:16px;position:relative;">
+          <div style="width:16px;height:16px;background:transparent;border:2px dashed rgba(59,130,246,0.3);border-radius:50%;flex-shrink:0;margin-left:-24px;margin-top:4px;z-index:1;"></div>
+          <div class="s-card" style="flex:1;background:rgba(30,41,59,0.3);border:1px dashed rgba(59,130,246,0.2);padding:12px 14px;border-radius:8px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+              <span style="font-size:12px;font-weight:600;color:#475569;">Q4 2025</span>
+              <span class="s-badge" style="background:rgba(71,85,105,0.3);color:#64748b;font-size:10px;padding:2px 8px;border-radius:3px;">远期规划</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="font-size:11px;color:#475569;background:rgba(30,41,59,0.4);padding:4px 8px;border-radius:4px;">多Agent协作</span>
+              <span style="font-size:11px;color:#475569;background:rgba(30,41,59,0.4);padding:4px 8px;border-radius:4px;">自研微调模型</span>
+              <span style="font-size:11px;color:#475569;background:rgba(30,41,59,0.4);padding:4px 8px;border-radius:4px;">Plugin Market</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 快速访问链接 -->
+        <div style="margin-top:8px;padding-top:12px;border-top:1px solid rgba(148,163,184,0.1);">
+          <p style="margin:0 0 10px;font-size:12px;color:#94a3b8;">快速访问</p>
+          <div style="display:flex;gap:10px;">
+            <a href="https://hermes-agent.nousresearch.com" target="_blank" class="s-card-hover" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#3b82f6;text-decoration:none;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);padding:8px 12px;border-radius:6px;transition:all 0.2s;">
+              <iconify-icon icon="mdi:web" style="font-size:14px;"></iconify-icon>
+              官方文档
+            </a>
+            <a href="https://github.com/nousresearch/hermes-agent" target="_blank" class="s-card-hover" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#3b82f6;text-decoration:none;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);padding:8px 12px;border-radius:6px;transition:all 0.2s;">
+              <iconify-icon icon="mdi:github" style="font-size:14px;"></iconify-icon>
+              GitHub
+            </a>
+            <a href="https://discord.gg/nousresearch" target="_blank" class="s-card-hover" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#3b82f6;text-decoration:none;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);padding:8px 12px;border-radius:6px;transition:all 0.2s;">
+              <iconify-icon icon="mdi:discord" style="font-size:14px;"></iconify-icon>
+              Discord
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部 CTA Block -->
+  <div style="background:linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0.05) 100%);border-top:1px solid rgba(59,130,246,0.3);padding:20px 48px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <div>
+      <h2 style="margin:0 0 6px;font-size:18px;font-weight:600;color:#f1f5f9;">加入我们，共建自我进化的 AI Agent 生态</h2>
+      <p style="margin:0;font-size:12px;color:#94a3b8;">Star 项目 · 提交 PR · 参与讨论 · 分享你的 Agent 应用案例</p>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <a href="https://github.com/nousresearch/hermes-agent" target="_blank" class="s-card-hover" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#0f172a;background:#3b82f6;text-decoration:none;padding:10px 20px;border-radius:8px;transition:all 0.2s;box-shadow:0 2px 8px rgba(59,130,246,0.4);">
+        <iconify-icon icon="mdi:github" style="font-size:18px;"></iconify-icon>
+        Star on GitHub
+      </a>
+      <a href="https://discord.gg/nousresearch" target="_blank" class="s-card-hover" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#f1f5f9;background:transparent;border:1px solid rgba(59,130,246,0.5);text-decoration:none;padding:10px 20px;border-radius:8px;transition:all 0.2s;">
+        <iconify-icon icon="mdi:discord" style="font-size:18px;color:#5865F2;"></iconify-icon>
+        Join Discord
+      </a>
+    </div>
+  </div>
+
+  <style>
+    .s-card-hover:hover {
+      border-color: rgba(59,130,246,0.6) !important;
+      background: rgba(59,130,246,0.15) !important;
+      transform: translateY(-1px);
+    }
+    a.s-card-hover:hover {
+      box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+    }
+  </style>
+
+</section></div></div>
+  </div>
+
+  <div id="deck-nav-overlay">
+    <button class="deck-nav-btn" id="prevBtn" onclick="prevPage()" aria-label="上一页" title="上一页 (←)">
+      <iconify-icon icon="mdi:chevron-left"></iconify-icon>
+    </button>
+    <span id="deck-page-indicator">1 / 15</span>
+    <button class="deck-nav-btn" id="nextBtn" onclick="nextPage()" aria-label="下一页" title="下一页 (→)">
+      <iconify-icon icon="mdi:chevron-right"></iconify-icon>
+    </button>
+  </div>
+
+  <script>
+    var totalPages = 15;
+    var currentPage = 0;
+    var slides = document.querySelectorAll('.deck-slide');
+
+    function scaleSlide(slide) {
+      var stage = slide.querySelector('.deck-stage');
+      if (!stage) return;
+      var vw = slide.offsetWidth || window.innerWidth;
+      var vh = slide.offsetHeight || window.innerHeight;
+      var scale = Math.min(vw / 1280, vh / 720);
+      var ox = (vw - 1280 * scale) / 2;
+      var oy = (vh - 720 * scale) / 2;
+      stage.style.transform = 'translate(' + ox + 'px, ' + oy + 'px) scale(' + scale + ')';
+    }
+
+    function scaleAllSlides() { slides.forEach(function(s) { scaleSlide(s); }); }
+
+    function goToPage(index) {
+      if (index < 0 || index >= totalPages) return;
+      slides[currentPage].classList.remove('active');
+      currentPage = index;
+      slides[currentPage].classList.add('active');
+      scaleSlide(slides[currentPage]);
+      updateUI();
+    }
+
+    function nextPage() { goToPage(currentPage + 1); }
+    function prevPage() { goToPage(currentPage - 1); }
+
+    function updateUI() {
+      document.getElementById('deck-progress-bar').style.width = ((currentPage + 1) / totalPages * 100) + '%';
+      document.getElementById('deck-page-indicator').textContent = (currentPage + 1) + ' / ' + totalPages;
+      document.getElementById('prevBtn').disabled = currentPage === 0;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages - 1;
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        e.preventDefault(); nextPage();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault(); prevPage();
+      }
+    });
+
+    window.addEventListener('load', function() { scaleAllSlides(); updateUI(); });
+    window.addEventListener('resize', scaleAllSlides);
+    // 两步初始化：立即尝试 + RAF 推迟确保布局完成后再缩放
+    scaleAllSlides();
+    requestAnimationFrame(function() { scaleAllSlides(); });
+    updateUI();
+  </script>
+</body>
+</html>

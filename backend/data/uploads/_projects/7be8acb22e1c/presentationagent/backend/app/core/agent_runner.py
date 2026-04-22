@@ -1,0 +1,673 @@
+"""
+Agent 运行器 — 重构后的 agent_loop, 使用 AgentContext + MiddlewareChain。
+
+原 agent_loop() 的职责拆分为:
+  1. AgentFactory.create()  → 动态构建 ctx + chain
+  2. AgentRunner.run()      → 执行主循环, 将所有内联流程委托给中间件
+
+AgentRunner 自身仅保留核心逻辑:
+  - 消息持久化
+  - LLM 调用
+  - 工具分发
+  - 上下文组装与压缩
+"""
+import json
+import logging
+import re
+import uuid
+from dataclasses import replace
+from datetime import datetime
+from typing import Any, Callable, Awaitable
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.agent_factory import AgentFactory
+from app.core.agent_middleware import AgentContext, MiddlewareChain
+from app.core.agent_prompts import build_base_system_prompt, SYSTEM_PROMPT
+from app.core.llm_client import chat_stream, LLMResponse
+from app.core.tool_dispatch import dispatch, get_tool_definitions_for_user, filter_tools_by_intent
+from app.models.tables import Task, TaskMessage
+from app.services.context_service import (
+    assemble_context,
+    compress_context,
+)
+
+logger = logging.getLogger(__name__)
+
+MAX_SUBAGENT_TOOL_RESULT = 4000  # 子 agent 内部工具结果截断（增大以减少信息丢失）
+
+
+def _classify_llm_error(e: Exception) -> tuple[str, bool]:
+    """将 LLM 异常分类为用户友好消息，保留诊断信息。返回 (message, recoverable)。"""
+    s = str(e).lower()
+    if any(k in s for k in ("context_length", "context length", "maximum context", "too long", "token limit", "tokens exceed", "input too long")):
+        return "对话历史过长，正在自动压缩… 请稍后重发消息，或使用 /compact 手动清理上下文", True
+    if any(k in s for k in ("overload", "529", "rate limit", "too many request", "service unavailable")):
+        return "AI 模型当前负载过高，请等待 30 秒后重试", True
+    if any(k in s for k in ("authentication", "invalid_api_key", "401", "forbidden")):
+        return "AI 模型认证失败，请检查 API 密钥配置", False
+    if any(k in s for k in ("timeout", "timed out", "connection")):
+        return "AI 模型连接超时，请检查网络并重试", True
+    return "AI 模型暂时不可用，请稍后重试", True
+
+
+# ──────────── 安全网: 自动检测并包裹 artifact 产物 ────────────
+
+# 已有 <general-artifact> 标签的内容不需要再处理
+_ARTIFACT_TAG_RE = re.compile(r"<general-artifact\s+type=\"[^\"]+\">", re.IGNORECASE)
+
+# draw.io XML 检测 (含 <mxfile> 或 <mxGraphModel>)
+_DRAWIO_RE = re.compile(r"<mxfile[\s>]|<mxGraphModel[\s>]", re.IGNORECASE)
+
+# 完整 HTML 页面检测 (含 <!DOCTYPE html> 或 <html> + </html>)
+_HTML_RE = re.compile(r"(?:<!DOCTYPE\s+html|<html[\s>])[\s\S]{200,}</html>", re.IGNORECASE)
+
+
+def _auto_wrap_artifact(content: str) -> str:
+    """如果 LLM 忘记使用 <general-artifact>，自动检测并包裹可识别的产物内容。
+
+    检测优先级: drawio XML > 完整 HTML 页面
+    只在确定识别到完整产物时才包裹，避免误判。
+    """
+    # 已有标签，不处理
+    if _ARTIFACT_TAG_RE.search(content):
+        return content
+
+    # 检测 draw.io XML（整段独立的 drawio 内容）
+    drawio_match = _DRAWIO_RE.search(content)
+    if drawio_match:
+        # 尝试提取完整的 XML 块
+        xml_start = content.find("<?xml", max(0, drawio_match.start() - 200))
+        if xml_start == -1:
+            xml_start = content.find("<mxfile", drawio_match.start())
+        if xml_start == -1:
+            xml_start = content.find("<mxGraphModel", drawio_match.start())
+        if xml_start >= 0:
+            # 从代码块中提取（如果在 ```xml ... ``` 中）
+            code_block_match = re.search(
+                r"```(?:xml|drawio)?\s*\n([\s\S]*?)\n```",
+                content[max(0, xml_start - 20):],
+            )
+            if code_block_match:
+                xml_content = code_block_match.group(1).strip()
+                before = content[:max(0, xml_start - 20) + code_block_match.start()]
+                after = content[max(0, xml_start - 20) + code_block_match.end():]
+                wrapped = f'<general-artifact type="drawio">\n{xml_content}\n</general-artifact>'
+                return f"{before.strip()}\n\n{wrapped}\n\n{after.strip()}".strip()
+            # 不在代码块中，尝试找到 </mxfile> 或 </mxGraphModel> 结尾
+            for end_tag in ["</mxfile>", "</mxGraphModel>"]:
+                end_pos = content.find(end_tag, xml_start)
+                if end_pos >= 0:
+                    xml_content = content[xml_start:end_pos + len(end_tag)]
+                    before = content[:xml_start]
+                    after = content[end_pos + len(end_tag):]
+                    wrapped = f'<general-artifact type="drawio">\n{xml_content}\n</general-artifact>'
+                    return f"{before.strip()}\n\n{wrapped}\n\n{after.strip()}".strip()
+
+    # 检测完整 HTML 页面
+    html_match = _HTML_RE.search(content)
+    if html_match:
+        # 从代码块中提取（如果在 ```html ... ``` 中）
+        code_block_match = re.search(
+            r"```html\s*\n([\s\S]*?)\n```",
+            content,
+        )
+        if code_block_match:
+            html_content = code_block_match.group(1).strip()
+            if len(html_content) > 200:  # 确保是实质性 HTML
+                before = content[:code_block_match.start()]
+                after = content[code_block_match.end():]
+                wrapped = f'<general-artifact type="webpage">\n{html_content}\n</general-artifact>'
+                return f"{before.strip()}\n\n{wrapped}\n\n{after.strip()}".strip()
+        else:
+            # HTML 直接在内容中（非代码块包裹）
+            html_start = content.find("<!DOCTYPE", html_match.start())
+            if html_start == -1:
+                html_start = content.find("<html", html_match.start())
+            end_pos = content.find("</html>", html_start)
+            if html_start >= 0 and end_pos >= 0:
+                html_content = content[html_start:end_pos + 7]
+                before = content[:html_start]
+                after = content[end_pos + 7:]
+                wrapped = f'<general-artifact type="webpage">\n{html_content}\n</general-artifact>'
+                return f"{before.strip()}\n\n{wrapped}\n\n{after.strip()}".strip()
+
+    return content
+
+
+class AgentRunner:
+    """Agent 主循环运行器 — 使用中间件链驱动。
+
+    替代原 agent_loop() 函数, 将所有横切关注点委托给 MiddlewareChain。
+    """
+
+    def __init__(self, ctx: AgentContext, chain: MiddlewareChain) -> None:
+        self._ctx = ctx
+        self._chain = chain
+
+    async def run(self, task: Task) -> None:
+        """执行 Agent 主循环。
+
+        Args:
+            task: 当前任务 ORM 对象 (需要用于设置标题、更新意图等)
+        """
+        ctx = self._ctx
+        chain = self._chain
+
+        # ── 0. 持久化用户消息 ──
+        user_msg_record = TaskMessage(
+            id=str(uuid.uuid4()),
+            task_id=ctx.task_id,
+            role="user",
+            content=ctx.user_message,
+            msg_type="text",
+            created_at=datetime.utcnow(),
+        )
+        ctx.session.add(user_msg_record)
+
+        if not task.title:
+            # 清除附件标记后再截取标题，避免侧边栏显示原始 [附件: ...] 文本
+            clean_title = re.sub(r"\[附件: .+?\]", "", ctx.user_message).strip()
+            clean_title = clean_title or "未命名任务"
+            task.title = clean_title[:50] + ("..." if len(clean_title) > 50 else "")
+            task.updated_at = datetime.utcnow()
+
+        await ctx.session.commit()
+
+        # ── 1. on_request_start: 记忆捕获、附件注入、brief 补充 ──
+        await chain.run_request_start(ctx)
+        if ctx.should_stop:
+            logger.info(f"[AgentRunner] 请求被中间件终止: {ctx.stop_reason}")
+            await chain.run_request_end(ctx)
+            return
+
+        # ── 2. 推送 "正在思考" 状态 ──
+        if ctx.send_fn:
+            await ctx.send_fn({
+                "type": "status",
+                "text": "正在思考...",
+                "task_id": ctx.task_id,
+            })
+
+        # ── 3. 组装上下文 ──
+        base_prompt = build_base_system_prompt(intent=ctx.intent) if ctx.intent else SYSTEM_PROMPT
+        system_prompt, messages, needs_compress = await assemble_context(
+            session=ctx.session,
+            task_id=ctx.task_id,
+            user_id=ctx.user_id,
+            base_prompt=base_prompt,
+        )
+
+        if needs_compress:
+            logger.info(f"[AgentRunner] task={ctx.task_id} 触发自动上下文压缩")
+            if ctx.send_fn:
+                await ctx.send_fn({
+                    "type": "status",
+                    "text": "上下文较长，正在压缩...",
+                    "task_id": ctx.task_id,
+                })
+            await compress_context(ctx.session, ctx.task_id, ctx.user_id, ctx.send_fn)
+            system_prompt, messages, _ = await assemble_context(
+                session=ctx.session,
+                task_id=ctx.task_id,
+                user_id=ctx.user_id,
+                base_prompt=base_prompt,
+            )
+
+        ctx.system_prompt = system_prompt
+        ctx.messages = messages
+
+        # ── 4. 主循环 ──
+        try:
+            await self._main_loop(ctx, chain, task)
+        finally:
+            # ── 5. on_request_end: 清理 ──
+            await chain.run_request_end(ctx)
+
+    async def _main_loop(
+        self,
+        ctx: AgentContext,
+        chain: MiddlewareChain,
+        task: Task,
+    ) -> None:
+        """核心主循环 — LLM (streaming) → 检查 stop_reason → dispatch_tool → 再次 LLM。"""
+        while ctx.round_count < ctx.max_rounds:
+            ctx.round_count += 1
+            logger.info(f"[AgentRunner] task={ctx.task_id} round={ctx.round_count}")
+
+            # ── on_before_llm: 可修改 messages/tools/system_prompt ──
+            await chain.run_before_llm(ctx)
+            if ctx.should_stop:
+                return
+
+            # ── 工具组装 (按意图动态过滤) ──
+            tools = await get_tool_definitions_for_user(ctx.session, ctx.user_id)
+            tools = filter_tools_by_intent(tools, ctx.intent)
+            ctx.tools = tools
+
+            # ── LLM 流式调用 ──
+            response = await self._call_llm_streaming(ctx, chain, task, tools)
+            if response is None:
+                # 错误已在 _call_llm_streaming 中处理
+                return
+
+            # ── 处理 stop_reason ──
+            if response.stop_reason == "end_turn":
+                # 流式内容已在 _call_llm_streaming 中逐 chunk 推送
+                await self._finalize_stream(ctx, chain, task, response)
+                return
+
+            elif response.stop_reason == "tool_use":
+                await self._handle_tool_use(ctx, chain, task, response)
+
+                # ── on_round_end: 循环检测、检查点 ──
+                await chain.run_round_end(ctx)
+                if ctx.should_stop:
+                    return
+                # 继续循环
+
+            else:
+                logger.warning(f"[AgentRunner] 未知 stop_reason: {response.stop_reason}")
+                if response.content and ctx.send_fn:
+                    await ctx.send_fn({
+                        "type": "message",
+                        "role": "assistant",
+                        "content": response.content,
+                        "task_id": ctx.task_id,
+                    })
+                return
+
+        # 超过最大轮次
+        logger.warning(f"[AgentRunner] task={ctx.task_id} 达到最大工具调用轮次 {ctx.max_rounds}")
+        if ctx.send_fn:
+            await ctx.send_fn({
+                "type": "message",
+                "role": "assistant",
+                "content": "抱歉，处理过程过于复杂，已达到最大工具调用轮次。请尝试简化你的请求。",
+                "task_id": ctx.task_id,
+            })
+
+    async def _call_llm_streaming(
+        self,
+        ctx: AgentContext,
+        chain: MiddlewareChain,
+        task: Task,
+        tools: list[dict],
+    ) -> LLMResponse | None:
+        """流式调用 LLM，逐 chunk 推送 content_delta，返回最终 LLMResponse。
+
+        对于 end_turn: 先发 stream_start → N 个 content_delta → 由调用方 finalize
+        对于 tool_use: 静默收集，不发流式消息
+        返回 None 表示出错（已向客户端推送错误消息）。
+        """
+        stream_started = False
+        try:
+            async for chunk in chat_stream(
+                system=ctx.system_prompt,
+                messages=ctx.messages,
+                tools=tools if tools else None,
+                model=ctx.model,
+                task_id=ctx.task_id,
+            ):
+                chunk_type = chunk.get("type")
+
+                if chunk_type == "content_delta":
+                    # 首个 content chunk 时发送 stream_start
+                    if not stream_started and ctx.send_fn:
+                        await ctx.send_fn({
+                            "type": "stream_start",
+                            "task_id": ctx.task_id,
+                        })
+                        stream_started = True
+                    # 逐 chunk 推送给前端
+                    if ctx.send_fn:
+                        await ctx.send_fn({
+                            "type": "content_delta",
+                            "content": chunk["content"],
+                            "task_id": ctx.task_id,
+                        })
+
+                elif chunk_type == "tool_use":
+                    # tool_use 不需要流式推送，chat_stream 内部已收集
+                    pass
+
+                elif chunk_type == "done":
+                    response: LLMResponse = chunk["response"]
+                    # on_after_llm 中间件
+                    ctx.set_meta("last_total_tokens", response.total_tokens)
+                    await chain.run_after_llm(ctx, response)
+                    return response
+
+                elif chunk_type == "error":
+                    raise Exception(chunk.get("error", "Unknown streaming error"))
+
+        except Exception as e:
+            logger.exception(f"[AgentRunner] LLM 流式调用失败: {e}")
+            # 如果已开始流式，先结束流
+            if stream_started and ctx.send_fn:
+                await ctx.send_fn({
+                    "type": "stream_end",
+                    "task_id": ctx.task_id,
+                    "error": True,
+                })
+            if ctx.send_fn:
+                user_msg, recoverable = _classify_llm_error(e)
+                await ctx.send_fn({
+                    "type": "error",
+                    "message": user_msg,
+                    "recoverable": recoverable,
+                })
+            return None
+
+        # 理论上不会到这里（chat_stream 总会 yield done 或 error）
+        logger.warning("[AgentRunner] chat_stream 未正常结束")
+        return None
+
+    async def _finalize_stream(
+        self,
+        ctx: AgentContext,
+        chain: MiddlewareChain,
+        task: Task,
+        response: LLMResponse,
+    ) -> None:
+        """Finalize streaming end_turn — persist, send stream_end, run middleware."""
+        content = response.content
+
+        # 意图检测 (中间件已在 on_after_llm 中处理, 这里同步到 task)
+        detected_intent = ctx.get_meta("detected_intent")
+        if detected_intent and task.intent is None:
+            task.intent = detected_intent
+            ctx.intent = detected_intent
+            await ctx.session.commit()
+            if ctx.send_fn:
+                await ctx.send_fn({
+                    "type": "intent_detected",
+                    "intent": detected_intent,
+                    "task_id": ctx.task_id,
+                })
+
+        # 清除意图标记
+        content = re.sub(r"\[INTENT:\w+\]\s*", "", content).strip()
+        # 清除 LLM 思考标签（<think>...</think>），避免泄漏到前端
+        content = re.sub(r"<think>[\s\S]*?</think>\s*", "", content).strip()
+
+        # 安全网: 如果 LLM 未使用 <general-artifact> 标签但生成了可识别的产物内容，自动包裹
+        content = _auto_wrap_artifact(content)
+
+        # 持久化
+        assistant_msg = TaskMessage(
+            id=str(uuid.uuid4()),
+            task_id=ctx.task_id,
+            role="assistant",
+            content=content,
+            msg_type="text",
+            token_count=response.total_tokens,
+            created_at=datetime.utcnow(),
+        )
+        ctx.session.add(assistant_msg)
+        await ctx.session.commit()
+
+        # on_round_end (检查点保存等)
+        await chain.run_round_end(ctx)
+
+        # 发送 stream_end，告知前端流式完成
+        if ctx.send_fn:
+            await ctx.send_fn({
+                "type": "stream_end",
+                "task_id": ctx.task_id,
+                "message_id": assistant_msg.id,
+                "content": content,
+                "token_usage": {
+                    "prompt": response.prompt_tokens,
+                    "completion": response.completion_tokens,
+                    "total": response.total_tokens,
+                },
+            })
+
+    async def _handle_tool_use(
+        self,
+        ctx: AgentContext,
+        chain: MiddlewareChain,
+        task: Task,
+        response: LLMResponse,
+    ) -> None:
+        """处理 tool_use — LLM 要求调用工具。"""
+        # ── 拦截 general-artifact 误调用 ──
+        # LLM 有时将 <general-artifact> 文本格式标签误解为工具调用，需在分发前重定向为文本输出
+        real_tool_calls = [tc for tc in response.tool_calls if tc.name != "general-artifact"]
+        artifact_tool_calls = [tc for tc in response.tool_calls if tc.name == "general-artifact"]
+        if artifact_tool_calls:
+            logger.warning(
+                "[AgentRunner] 拦截 %d 个 general-artifact tool_use 调用，重定向为文本输出",
+                len(artifact_tool_calls),
+            )
+            parts = [response.content] if response.content else []
+            for tc in artifact_tool_calls:
+                artifact_type = tc.input.get("type", "document")
+                if "content" in tc.input:
+                    artifact_content = str(tc.input["content"])
+                else:
+                    # webdeck_brief: 整个 input 去掉 type 字段就是 JSON brief
+                    brief_data = {k: v for k, v in tc.input.items() if k != "type"}
+                    artifact_content = json.dumps(brief_data, ensure_ascii=False, indent=2)
+                parts.append(
+                    f'<general-artifact type="{artifact_type}">\n{artifact_content}\n</general-artifact>'
+                )
+            reconstructed_content = "\n\n".join(filter(None, parts))
+            if not real_tool_calls:
+                # 无其他真实工具调用 — 直接作为 end_turn 处理
+                fake_response = replace(
+                    response,
+                    content=reconstructed_content,
+                    stop_reason="end_turn",
+                    tool_calls=[],
+                )
+                await self._finalize_stream(ctx, chain, task, fake_response)
+                return
+            # 混合情况 — 注入重建文本，继续处理真实工具
+            response = replace(response, content=reconstructed_content, tool_calls=real_tool_calls)
+
+        # 推送中间文本
+        if response.content and ctx.send_fn:
+            await ctx.send_fn({
+                "type": "thinking",
+                "content": response.content,
+                "task_id": ctx.task_id,
+            })
+
+        # 构建 assistant 消息 (含 tool_calls)
+        assistant_tool_msg = {
+            "role": "assistant",
+            "content": response.content or "",
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.input, ensure_ascii=False),
+                    },
+                }
+                for tc in response.tool_calls
+            ],
+        }
+        ctx.messages.append(assistant_tool_msg)
+
+        # 持久化 assistant tool_calls
+        tool_calls_data = [
+            {"id": tc.id, "name": tc.name, "input": tc.input}
+            for tc in response.tool_calls
+        ]
+        assistant_tc_record = TaskMessage(
+            id=str(uuid.uuid4()),
+            task_id=ctx.task_id,
+            role="assistant",
+            content=json.dumps(
+                {"tool_calls": tool_calls_data, "text": response.content or ""},
+                ensure_ascii=False,
+            ),
+            msg_type="tool_calls",
+            created_at=datetime.utcnow(),
+        )
+        ctx.session.add(assistant_tc_record)
+
+        # 逐个执行 Tool
+        for tc in response.tool_calls:
+            if ctx.send_fn:
+                await ctx.send_fn({
+                    "type": "status",
+                    "text": f"正在执行工具: {tc.name}...",
+                    "task_id": ctx.task_id,
+                })
+
+            # on_tool_start — 中间件可拦截或修改参数
+            params = await chain.run_tool_start(ctx, tc.name, tc.input)
+            if params is None:
+                # 中间件拦截了该工具
+                tool_result = {"blocked": True, "tool": tc.name, "reason": "blocked by middleware"}
+            else:
+                # 为 dispatch_subagent 注入运行时上下文
+                if tc.name == "dispatch_subagent":
+                    from app.tools.dispatch_subagent import set_runtime_context
+                    set_runtime_context(ctx.send_fn, task, ctx.model)
+
+                tool_result = await dispatch(
+                    tc.name,
+                    params,
+                    session=ctx.session,
+                    user_id=ctx.user_id,
+                )
+
+            # on_tool_end — 中间件可修改结果 (PPT事件推送、循环记录、错误处理)
+            tool_result = await chain.run_tool_end(ctx, tc.name, params or tc.input, tool_result)
+
+            # 持久化 Tool 记录
+            tool_msg_record = TaskMessage(
+                id=str(uuid.uuid4()),
+                task_id=ctx.task_id,
+                role="tool",
+                content=json.dumps(tool_result, ensure_ascii=False),
+                msg_type="tool_result",
+                tool_name=tc.name,
+                tool_input={"_tool_call_id": tc.id, **(params or tc.input)},
+                created_at=datetime.utcnow(),
+            )
+            ctx.session.add(tool_msg_record)
+
+            # 加入消息列表
+            ctx.messages.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": json.dumps(tool_result, ensure_ascii=False),
+            })
+
+        await ctx.session.commit()
+
+    async def _run_subagent_loop(self, ctx: AgentContext, chain: MiddlewareChain) -> None:
+        """子 agent 精简主循环 — 不持久化消息到 DB，不做 context 压缩。"""
+        from app.core.tool_dispatch import dispatch as tool_dispatch
+
+        await chain.run_request_start(ctx)
+        if ctx.should_stop:
+            return
+
+        while ctx.round_count < ctx.max_rounds:
+            ctx.round_count += 1
+
+            await chain.run_before_llm(ctx)
+            if ctx.should_stop:
+                return
+
+            # LLM 调用（复用流式方法）
+            response = await self._call_llm_streaming(ctx, chain, None, ctx.tools)
+            if response is None:
+                return
+
+            if response.stop_reason == "end_turn":
+                # 追加最终内容到 messages
+                if response.content:
+                    ctx.messages.append({"role": "assistant", "content": response.content})
+                await chain.run_round_end(ctx)
+                return
+
+            if response.stop_reason == "tool_use":
+                # 处理工具调用（不持久化到 DB）
+                tool_calls_msg = {
+                    "role": "assistant",
+                    "content": response.content or "",
+                    "tool_calls": [
+                        {"id": tc.id, "type": "function",
+                         "function": {"name": tc.name, "arguments": json.dumps(tc.input, ensure_ascii=False)}}
+                        for tc in response.tool_calls
+                    ],
+                }
+                ctx.messages.append(tool_calls_msg)
+
+                for tc in response.tool_calls:
+                    params = tc.input
+
+                    # 拦截 general-artifact 误调用（子 agent 中重建为文本 tool result）
+                    if tc.name == "general-artifact":
+                        artifact_type = params.get("type", "document")
+                        if "content" in params:
+                            artifact_content = str(params["content"])
+                        else:
+                            brief_data = {k: v for k, v in params.items() if k != "type"}
+                            artifact_content = json.dumps(brief_data, ensure_ascii=False, indent=2)
+                        rebuilt = f'<general-artifact type="{artifact_type}">\n{artifact_content}\n</general-artifact>'
+                        ctx.messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": json.dumps({"content": rebuilt}, ensure_ascii=False),
+                        })
+                        continue
+
+                    intercepted = await chain.run_tool_start(ctx, tc.name, params)
+                    if intercepted is None:
+                        tool_result = {"error": "blocked by middleware"}
+                    else:
+                        params = intercepted
+                        try:
+                            tool_result = await tool_dispatch(tc.name, params, session=ctx.session, user_id=ctx.user_id)
+                        except Exception as e:
+                            tool_result = {"error": str(e)}
+
+                    await chain.run_tool_end(ctx, tc.name, params, tool_result)
+                    ctx.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": json.dumps(tool_result, ensure_ascii=False, default=str)[:MAX_SUBAGENT_TOOL_RESULT],
+                    })
+
+                await chain.run_round_end(ctx)
+
+        await chain.run_request_end(ctx)
+
+
+# ──────────────── 兼容入口 ────────────────
+
+# 全局工厂实例 (默认配置)
+_default_factory = AgentFactory()
+
+
+async def agent_loop_v2(
+    task: Task,
+    user_message: str,
+    session: AsyncSession,
+    send_fn: Callable[[dict[str, Any]], Awaitable[None]],
+    model: str | None = None,
+) -> None:
+    """重构后的 Agent 主循环入口 — 使用 Factory + Runner + Middleware。
+
+    签名与原 agent_loop() 完全兼容，可直接替换调用。
+    """
+    ctx, chain = _default_factory.create(
+        task=task,
+        user_message=user_message,
+        session=session,
+        send_fn=send_fn,
+        model=model,
+    )
+
+    runner = AgentRunner(ctx, chain)
+    await runner.run(task)

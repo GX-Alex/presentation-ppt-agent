@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__fetch__fetch",
+      "mcp__MiniMax__web_search"
+    ]
+  }
+}

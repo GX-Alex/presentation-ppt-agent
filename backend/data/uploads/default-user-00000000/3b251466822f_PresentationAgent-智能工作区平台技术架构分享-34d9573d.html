@@ -1,0 +1,2780 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PresentationAgent 智能工作区平台技术架构分享</title>
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    @page { size: 1280px 720px; margin: 0; }
+
+    /* ── P0: 全屏幻灯片容器 ── */
+    #slides-container { position: fixed; inset: 0; }
+
+    .deck-slide {
+      position: absolute; inset: 0;
+      display: none;
+      overflow: hidden;
+    }
+    .deck-slide.active { display: block; }
+
+    /* P2: 固定 1280×720 画布，通过 JS scale+translate 居中适配视口 */
+    .deck-stage {
+      width: 1280px; height: 720px;
+      position: absolute; top: 0; left: 0;
+      transform-origin: 0 0;
+      overflow: hidden;
+    }
+    .deck-stage > *,
+    .deck-stage > section,
+    .deck-stage > [data-page-id] {
+      width: 100% !important; height: 100% !important;
+      max-height: 100% !important; min-height: 0 !important;
+      overflow: hidden !important; box-sizing: border-box !important;
+    }
+
+    /* ── 顶部进度条 ── */
+    #deck-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.08); z-index: 1000; }
+    #deck-progress-bar { height: 100%; background: #3b82f6; transition: width 0.3s ease; width: 0%; }
+
+    /* ── P0: 右下角幽灵导航覆层 ── */
+    #deck-nav-overlay {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; align-items: center; gap: 8px;
+      z-index: 1000; opacity: 0.25; transition: opacity 0.2s;
+    }
+    #deck-nav-overlay:hover { opacity: 1; }
+    .deck-nav-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.85);
+      cursor: pointer; transition: all 0.15s;
+      backdrop-filter: blur(8px); font-size: 18px;
+    }
+    .deck-nav-btn:hover { background: rgba(255,255,255,0.15); color: white; }
+    .deck-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    #deck-page-indicator { font-size: 11px; color: rgba(255,255,255,0.65); min-width: 40px; text-align: center; }
+
+    /* ── P1: CSS 变量 + shadcn/ui 风格组件类 (.s- 前缀) ── */
+    :root { --accent: #3b82f6; --s-card-bg: rgba(255,255,255,0.04); --s-card-border: rgba(255,255,255,0.1); --s-radius: 12px; }
+    .s-card { background: var(--s-card-bg); border: 1px solid var(--s-card-border); border-radius: var(--s-radius); padding: 1rem 1.25rem; }
+    .s-card-hover { transition: all 0.2s; }
+    .s-card-hover:hover { background: rgba(255,255,255,0.07); transform: translateY(-2px); }
+    .s-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    .s-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .s-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    .s-flex { display: flex; align-items: center; gap: 0.75rem; }
+    .s-flex-col { display: flex; flex-direction: column; gap: 0.75rem; }
+    .s-alert { border-left: 4px solid var(--accent); background: rgba(59,130,246,0.08); border-radius: 0 var(--s-radius) var(--s-radius) 0; padding: 0.75rem 1rem; }
+    .s-alert-warn { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+    .s-alert-error { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+    .s-alert-success { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+    .s-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
+    .s-code { font-family: "JetBrains Mono","Fira Code",monospace; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.2em 0.5em; font-size: 0.85em; }
+    .s-stat { text-align: center; }
+    .s-stat-value { font-size: 2.5rem; font-weight: 800; color: var(--accent); line-height: 1; }
+    .s-stat-label { font-size: 0.8rem; color: rgba(255,255,255,0.55); margin-top: 0.25rem; }
+    .s-table { width: 100%; border-collapse: collapse; }
+    .s-table th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); border-bottom: 1px solid rgba(255,255,255,0.1); padding: 0.5rem 0.75rem; text-align: left; }
+    .s-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.875rem; }
+    .s-table tr:last-child td { border-bottom: none; }
+    .s-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 0.75rem 0; }
+
+    /* ── 打印：每页独立输出 ── */
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      #deck-nav-overlay, #deck-progress { display: none !important; }
+      html, body { overflow: visible !important; background: #0f172a !important; }
+      #slides-container { position: static !important; }
+      .deck-slide {
+        display: block !important; position: static !important;
+        page-break-after: always; break-after: page;
+        width: 100vw !important; height: 56.25vw !important;
+      }
+      .deck-slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-stage { transform: none !important; width: 100% !important; height: auto !important; overflow: visible !important; max-height: none !important; }
+      .deck-stage > *,
+      .deck-stage > section,
+      .deck-stage > [data-page-id] {
+        overflow: visible !important;
+        max-height: none !important;
+        height: auto !important;
+      }
+      iconify-icon { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="deck-progress"><div id="deck-progress-bar"></div></div>
+
+  <div id="slides-container">
+<div class="deck-slide active"><div class="deck-stage"><section data-page-id="p01" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:56px 64px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 顶部装饰线 -->
+  <div style="width:80px;height:4px;background:linear-gradient(90deg,#0070F3,#0a0a0a);margin-bottom:32px;"></div>
+  
+  <!-- 主标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:48px;color:#0a0a0a;font-weight:700;margin:0 0 16px 0;letter-spacing:-1px;line-height:1.2;">
+    PresentationAgent
+  </h1>
+  
+  <!-- 副标题 -->
+  <h2 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:24px;color:#0070F3;font-weight:500;margin:0 0 24px 0;">
+    智能工作区平台
+  </h2>
+  
+  <!-- 分隔装饰 -->
+  <div style="width:120px;height:1px;background:#D4AF37;margin-bottom:28px;"></div>
+  
+  <!-- 核心价值主张 -->
+  <p style="font-family:Arial,Roboto,'Helvetica Neue',sans-serif;font-size:18px;color:#4A4A4A;margin:0 0 36px 0;max-width:720px;line-height:1.6;">
+    基于 AI Agent 的智能工作区平台，将复杂 AI 能力封装为简单用户交互
+  </p>
+  
+  <!-- 四大核心能力展示 -->
+  <div style="display:flex;gap:20px;margin-bottom:40px;">
+    <div style="flex:1;background:#f5f5f5;border-left:3px solid #0070F3;padding:16px 20px;">
+      <span style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;font-weight:600;">Web Deck</span>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#666;margin:6px 0 0 0;">智能演示文稿生成</p>
+    </div>
+    <div style="flex:1;background:#f5f5f5;border-left:3px solid #D4AF37;padding:16px 20px;">
+      <span style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;font-weight:600;">Draw.io</span>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#666;margin:6px 0 0 0;">流程图智能编排</p>
+    </div>
+    <div style="flex:1;background:#f5f5f5;border-left:3px solid #0070F3;padding:16px 20px;">
+      <span style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;font-weight:600;">Web Sandbox</span>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#666;margin:6px 0 0 0;">交互式Web沙盒</p>
+    </div>
+    <div style="flex:1;background:#f5f5f5;border-left:3px solid #D4AF37;padding:16px 20px;">
+      <span style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;font-weight:600;">智能文档</span>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#666;margin:6px 0 0 0;">Markdown技术报告</p>
+    </div>
+  </div>
+  
+  <!-- 底部信息 -->
+  <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #E0E0E0;padding-top:24px;">
+    <div>
+      <p style="font-family:Arial,sans-serif;font-size:13px;color:#9E9E9E;margin:0;">技术分享 · 架构深度解析</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <iconify-icon icon="mdi:brain" style="font-size:20px;color:#0070F3;"></iconify-icon>
+      <iconify-icon icon="mdi:robot" style="font-size:20px;color:#D4AF37;"></iconify-icon>
+      <iconify-icon icon="mdi:presentation" style="font-size:20px;color:#0070F3;"></iconify-icon>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p02" class="deck-page" style="background-color: #ffffff; min-height: 100vh; width: 100%; font-family: Arial, Roboto, 'Helvetica Neue', sans-serif; color: #0a0a0a; box-sizing: border-box; padding: 40px 60px; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <h1 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 36px; color: #0a0a0a; margin: 0 0 20px 0; text-align: center; letter-spacing: 1px;">执行摘要</h1>
+  
+  <div style="background-color: #ffffff; border: 1px solid #e0e0e0; border-left: 4px solid #0070F3; padding: 20px 24px; margin-bottom: 24px; text-align: center;">
+    <p style="font-size: 18px; line-height: 1.6; margin: 0; color: #0a0a0a;">PresentationAgent 通过 AgentRuntime 引擎和 14 层中间件链，为技术团队提供从自然语言需求到专业演示产物的全链路智能服务。</p>
+  </div>
+
+  <div class="deck-visual-wrapper" style="text-align: center; margin-bottom: 20px; padding: 10px;">
+    <svg width="720" height="100" viewBox="0 0 720 100" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:#0070F3;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#D4AF37;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect x="10" y="30" width="120" height="40" rx="4" fill="#f5f5f5" stroke="#0070F3" stroke-width="2"/>
+      <text x="70" y="55" font-size="12" font-family="Arial" fill="#0a0a0a" text-anchor="middle">自然语言输入</text>
+      <path d="M140 50 L180 50" stroke="url(#arrowGrad)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+      <rect x="190" y="10" width="200" height="80" rx="4" fill="none" stroke="#D4AF37" stroke-width="2" stroke-dasharray="4,2"/>
+      <text x="290" y="35" font-size="12" font-family="Arial" fill="#0a0a0a" text-anchor="middle">AgentRuntime 引擎</text>
+      <text x="290" y="55" font-size="10" font-family="Arial" fill="#666" text-anchor="middle">14 层中间件链</text>
+      <path d="M400 50 L440 50" stroke="url(#arrowGrad)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+      <rect x="450" y="30" width="100" height="40" rx="4" fill="#f5f5f5" stroke="#0070F3" stroke-width="2"/>
+      <text x="500" y="55" font-size="12" font-family="Arial" fill="#0a0a0a" text-anchor="middle">智能编排</text>
+      <path d="M560 50 L600 50" stroke="url(#arrowGrad)" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+      <rect x="610" y="30" width="100" height="40" rx="4" fill="#0070F3" stroke="#0070F3" stroke-width="2"/>
+      <text x="660" y="55" font-size="12" font-family="Arial" fill="#ffffff" text-anchor="middle">演示产物</text>
+    </svg>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #ffffff; border-top: 3px solid #0070F3;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 14px; color: #0a0a0a; margin: 0 0 8px 0; line-height: 1.3;">核心价值：LLM 原生驱动，端到端自动化</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">将自然语言需求直接转化为专业演示产物，消除人工编排瓶颈。</p>
+    </div>
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #ffffff; border-top: 3px solid #D4AF37;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 14px; color: #0a0a0a; margin: 0 0 8px 0; line-height: 1.3;">技术架构：三层微服务实现高效渲染</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">Backend (FastAPI) + Frontend (Next.js 14) + Native Renderer (PptxGenJS) 协同工作。</p>
+    </div>
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #ffffff; border-top: 3px solid #0070F3;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 14px; color: #0a0a0a; margin: 0 0 8px 0; line-height: 1.3;">编排系统：五大角色协同完成智能编排</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">Director → Planner → Scheduler → Orchestrator → Reviewer 全链路质量管控。</p>
+    </div>
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #ffffff; border-top: 3px solid #D4AF37;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 14px; color: #0a0a0a; margin: 0 0 8px 0; line-height: 1.3;">中间件链：14 层中间件实现复杂任务处理</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">MemoryCapture、IntentDetection、TokenBudget、LoopDetection 等中间件协同保障任务执行。</p>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #f5f5f5;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 13px; color: #0a0a0a; margin: 0 0 8px 0;">核心能力一：Web Deck 演示文稿自动化</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">自然语言描述直接生成原生 .pptx 文件，支持精准编辑与页面重生成。</p>
+    </div>
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #f5f5f5;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 13px; color: #0a0a0a; margin: 0 0 8px 0;">核心能力二：Draw.io 流程图智能生成</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">架构与流程可视化，输出 draw.io 兼容 XML，提升技术文档专业度。</p>
+    </div>
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #f5f5f5;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 13px; color: #0a0a0a; margin: 0 0 8px 0;">核心能力三：Web Sandbox 实时交互</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">React + TypeScript + Tailwind 构建单页应用，所见即所得的编辑体验。</p>
+    </div>
+    <div style="border: 1px solid #e0e0e0; padding: 14px; background: #f5f5f5;">
+      <h3 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 13px; color: #0a0a0a; margin: 0 0 8px 0;">目标用户：技术研发团队</h3>
+      <p style="font-size: 11px; color: #666; margin: 0; line-height: 1.4;">面向需要高效生成技术分享、架构文档、项目汇报的技术专业人员。</p>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p03" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- So What 标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:26px;color:#0a0a0a;font-weight:700;margin:0 0 6px 0;">
+    将复杂的 AI 能力封装为简单的用户交互，让技术团队专注于内容本身
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#9E9E9E;margin:0 0 20px 0;">
+    项目定位与愿景 · 数据截至 2024Q3
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+  
+  <!-- 3栏卡片布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+    <!-- 卡片1: 项目概述 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;background:#FAFAFA;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:rocket-launch" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">项目概述</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        PresentationAgent 是基于 AI Agent 的智能工作区平台，通过统一中间件链引擎驱动四大核心能力，实现从需求到产物的全链路智能服务。
+      </p>
+    </div>
+
+    <!-- 卡片2: 核心价值主张 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;background:#FAFAFA;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:lightbulb" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">核心价值主张</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        用户只需用自然语言描述需求，即可获得专业演示文稿、流程图、Web 应用和技术文档，实现「言即所得」的极致体验。
+      </p>
+    </div>
+
+    <!-- 卡片3: 目标用户 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;background:#FAFAFA;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:users" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">目标用户画像</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        技术团队负责人、研发工程师、产品经理、技术布道者——任何需要快速制作技术演示和文档的专业人士。
+      </p>
+    </div>
+  </div>
+
+  <!-- 三个 text_block 详细说明区 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+    <!-- text_block 1: 核心能力矩阵 -->
+    <div style="border-left:3px solid #0070F3;padding-left:14px;">
+      <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">核心能力矩阵</h4>
+      <ul style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.8;margin:0;padding-left:14px;">
+        <li>智能编排：自动解析用户意图，智能规划内容结构</li>
+        <li>多模态输出：一次生成，多种产物形态</li>
+        <li>实时预览：所见即所得的编辑体验</li>
+        <li>增量编辑：支持页面级细粒度修改</li>
+        <li>版本控制：完整的变更历史追溯</li>
+      </ul>
+    </div>
+
+    <!-- text_block 2: 技术实现 -->
+    <div style="border-left:3px solid #D4AF37;padding-left:14px;">
+      <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">技术实现</h4>
+      <ul style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.8;margin:0;padding-left:14px;">
+        <li>AgentFactory 动态构建机制</li>
+        <li>14 层中间件链设计</li>
+        <li>WebDeck 五大角色编排系统</li>
+        <li>litellm 统一接口多模型支持</li>
+        <li>双 Store 状态管理架构</li>
+      </ul>
+    </div>
+
+    <!-- text_block 3: 产品愿景 -->
+    <div style="border-left:3px solid #0070F3;padding-left:14px;">
+      <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">产品愿景</h4>
+      <ul style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.8;margin:0;padding-left:14px;">
+        <li>打造下一代智能工作区标杆</li>
+        <li>降低技术内容创作门槛</li>
+        <li>提升团队协作效率 10 倍</li>
+        <li>赋能每个技术人成为优秀的布道者</li>
+        <li>构建开源技术分享生态</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 底部强调语 -->
+  <div style="margin-top:20px;padding:14px 18px;background:#F8FAFC;border-radius:4px;border:1px solid #E0E0E0;">
+    <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#0a0a0a;margin:0;line-height:1.6;">
+      <strong style="color:#0070F3;">核心定位：</strong>在当今快节奏的工作环境中，制作高质量的技术演示文稿往往需要耗费大量时间和精力。PresentationAgent 致力于让技术团队能够专注于内容本身，而非格式和排版。
+    </p>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p04" class="deck-page" style="background-color: #ffffff; width: 100%; min-height: 100vh; font-family: Arial, Roboto, 'Helvetica Neue', sans-serif; color: #0a0a0a; display: flex; flex-direction: column; overflow: hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <div class="deck-narrative-container" style="padding: 24px 40px 16px; box-sizing: border-box;">
+    <h1 class="deck-title" style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; font-size: 28px; font-weight: 600; color: #0a0a0a; margin: 0 0 12px 0; text-align: center; letter-spacing: 0.5px;">三层微服务架构总览</h1>
+    <div class="deck-core-message" style="text-align: center; margin-bottom: 20px;">
+      <p style="font-size: 14px; color: #555555; margin: 0; line-height: 1.6;">采用经典的三层微服务架构，各服务职责清晰，通过 Docker Compose 实现一键部署，实现前后端分离与原生渲染解耦。</p>
+    </div>
+    <div class="deck-points-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
+      <div class="deck-point-card" style="background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; ">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; font-size: 13px; color: #0070F3; margin: 0 0 8px 0; font-weight: 600;">用户交互层 / Frontend</h3>
+        <p style="font-size: 11px; color: #555555; margin: 0; line-height: 1.5;">基于 Next.js 14 + React + TypeScript 构建，包含工作区面板、对话面板与实时预览引擎。通过 Zustand Store 实现状态管理。</p>
+      </div>
+      <div class="deck-point-card" style="background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; ">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; font-size: 13px; color: #0070F3; margin: 0 0 8px 0; font-weight: 600;">核心服务层 / Backend</h3>
+        <p style="font-size: 11px; color: #555555; margin: 0; line-height: 1.5;">基于 FastAPI 构建的 AI Agent 运行时引擎。核心组件包括 AgentFactory、MiddlewareChain、AgentRunner，处理流式 LLM 调用 chat_stream。</p>
+      </div>
+      <div class="deck-point-card" style="background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; ">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; font-size: 13px; color: #D4AF37; margin: 0 0 8px 0; font-weight: 600;">渲染输出层 / Native Renderer</h3>
+        <p style="font-size: 11px; color: #555555; margin: 0; line-height: 1.5;">基于 PptxGenJS 的原生 PPTX 渲染引擎，将结构化数据转换为二进制演示文件，支持多格式内容输出。</p>
+      </div>
+      <div class="deck-point-card" style="background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; ">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; font-size: 13px; color: #8B5CF6; margin: 0 0 8px 0; font-weight: 600;">通信协议 / Protocol</h3>
+        <p style="font-size: 11px; color: #555555; margin: 0; line-height: 1.5;">WebSocket 负责实时双向通信；REST API 提供标准化接口；二进制 PPTX 通过 Base64 编码传输，确保数据类型安全。</p>
+      </div>
+    </div>
+  </div>
+  <div class="deck-visual-wrapper deck-diagram-wrapper" style="flex: 1; padding: 0 20px 16px; box-sizing: border-box; min-height: 0;">
+    <svg viewBox="0 0 1200 520" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#0070F3"/>
+          <stop offset="100%" stop-color="#005ACD"/>
+        </linearGradient>
+        <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="130%">
+          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0070F3" flood-opacity="0.08"/>
+        </filter>
+        <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#D4AF37"/>
+          <stop offset="100%" stop-color="#C9A227"/>
+        </linearGradient>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#ffffff"/>
+      
+      <text x="600" y="30" text-anchor="middle" font-family="'Times New Roman', Garamond, Georgia, serif" font-size="18" font-weight="600" fill="#0a0a0a">三层微服务架构总览</text>
+      <text x="600" y="50" text-anchor="middle" font-family="Arial, Roboto, 'Helvetica Neue', sans-serif" font-size="12" fill="#666666">PresentationAgent 智能工作区平台</text>
+
+      <g id="userLayer">
+        <rect x="30" y="65" width="140" height="26" rx="13" fill="url(#goldGradient)"/>
+        <text x="100" y="83" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="500" fill="#ffffff">用户交互层</text>
+        
+        <rect x="30" y="100" width="350" height="180" rx="10" fill="#f8f9fa" stroke="#e5e7eb" stroke-width="1"/>
+        
+        <rect x="55" y="118" width="300" height="70" rx="8" fill="#ffffff" stroke="#0070F3" stroke-width="2" filter="url(#cardShadow)"/>
+        <rect x="55" y="118" width="300" height="26" rx="8" fill="url(#primaryGradient)"/>
+        <rect x="55" y="136" width="300" height="8" fill="url(#primaryGradient)"/>
+        <text x="205" y="136" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">Next.js 14 + React + TypeScript</text>
+        
+        <g id="coreCapabilities">
+          <rect x="70" y="160" width="55" height="24" rx="5" fill="#E8F4FD"/>
+          <text x="97" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#0070F3" font-weight="500">Web Deck</text>
+          
+          <rect x="135" y="160" width="55" height="24" rx="5" fill="#FEF9E8"/>
+          <text x="162" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#D4AF37" font-weight="500">Draw.io</text>
+          
+          <rect x="200" y="160" width="55" height="24" rx="5" fill="#E8F8F0"/>
+          <text x="227" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#28a745" font-weight="500">Sandbox</text>
+          
+          <rect x="265" y="160" width="55" height="24" rx="5" fill="#F5E8FD"/>
+          <text x="292" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#8B5CF6" font-weight="500">智能文档</text>
+        </g>
+        
+        <rect x="100" y="205" width="200" height="24" rx="5" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+        <text x="200" y="221" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#0a0a0a">Zustand Store (deckStore/chatStore)</text>
+      </g>
+
+      <g id="backendLayer">
+        <rect x="425" y="65" width="140" height="26" rx="13" fill="url(#primaryGradient)"/>
+        <text x="495" y="83" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="500" fill="#ffffff">后端服务层</text>
+        
+        <rect x="425" y="100" width="350" height="180" rx="10" fill="#f8f9fa" stroke="#e5e7eb" stroke-width="1"/>
+        
+        <rect x="450" y="118" width="300" height="100" rx="8" fill="#ffffff" stroke="#0070F3" stroke-width="2" filter="url(#cardShadow)"/>
+        <rect x="450" y="118" width="300" height="26" rx="8" fill="url(#primaryGradient)"/>
+        <rect x="450" y="136" width="300" height="8" fill="url(#primaryGradient)"/>
+        <text x="600" y="136" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">FastAPI Backend</text>
+        
+        <g id="agentModules">
+          <rect x="470" y="155" width="75" height="50" rx="5" fill="#E8F4FD"/>
+          <text x="507" y="172" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#0070F3" font-weight="600">AgentRuntime</text>
+          <text x="507" y="184" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">动态构建引擎</text>
+          <text x="507" y="194" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">AgentFactory</text>
+          
+          <rect x="555" y="155" width="75" height="50" rx="5" fill="#F0F7FF"/>
+          <text x="592" y="172" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#0070F3" font-weight="600">MiddlewareChain</text>
+          <text x="592" y="184" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">14层中间件</text>
+          <text x="592" y="194" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">链式处理</text>
+          
+          <rect x="640" y="155" width="75" height="50" rx="5" fill="#E8F4FD"/>
+          <text x="677" y="172" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#0070F3" font-weight="600">AgentRunner</text>
+          <text x="677" y="184" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">主循环执行</text>
+          <text x="677" y="194" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">流式调用</text>
+        </g>
+        
+        <rect x="470" y="215" width="260" height="24" rx="5" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+        <text x="600" y="231" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#0a0a0a">WebDeck Orchestrator (Director→Planner→Scheduler)</text>
+      </g>
+
+      <g id="nativeLayer">
+        <rect x="820" y="65" width="150" height="26" rx="13" fill="url(#goldGradient)"/>
+        <text x="895" y="83" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="500" fill="#ffffff">原生渲染层</text>
+        
+        <rect x="820" y="100" width="350" height="180" rx="10" fill="#f8f9fa" stroke="#e5e7eb" stroke-width="1"/>
+        
+        <rect x="845" y="118" width="300" height="70" rx="8" fill="#ffffff" stroke="#D4AF37" stroke-width="2" filter="url(#cardShadow)"/>
+        <rect x="845" y="118" width="300" height="26" rx="8" fill="url(#goldGradient)"/>
+        <rect x="845" y="136" width="300" height="8" fill="url(#goldGradient)"/>
+        <text x="995" y="136" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">PptxGenJS Renderer</text>
+        
+        <g id="rendererDetails">
+          <rect x="870" y="160" width="75" height="24" rx="5" fill="#FEF9E8"/>
+          <text x="907" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#D4AF37" font-weight="500">PPTX Gen</text>
+          
+          <rect x="955" y="160" width="75" height="24" rx="5" fill="#FEF9E8"/>
+          <text x="992" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#D4AF37" font-weight="500">Draw.io XML</text>
+          
+          <rect x="1040" y="160" width="75" height="24" rx="5" fill="#FEF9E8"/>
+          <text x="1077" y="176" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#D4AF37" font-weight="500">HTML/React</text>
+        </g>
+        
+        <rect x="870" y="200" width="250" height="24" rx="5" fill="#ffffff" stroke="#d1d5db" stroke-width="1"/>
+        <text x="995" y="216" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#0a0a0a">Output: .pptx | .drawio | .html</text>
+        
+        <rect x="870" y="232" width="250" height="24" rx="5" fill="#F5E8FD"/>
+        <text x="995" y="248" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#8B5CF6">Base64 Binary Transfer</text>
+      </g>
+
+      <g id="connections">
+        <line x1="380" y1="155" x2="425" y2="155" stroke="#0070F3" stroke-width="2" stroke-dasharray="6,3"/>
+        <polygon points="418,150 430,155 418,160" fill="#0070F3"/>
+        
+        <line x1="380" y1="180" x2="425" y2="180" stroke="#0070F3" stroke-width="2"/>
+        <polygon points="418,175 430,180 418,185" fill="#0070F3"/>
+        
+        <line x1="775" y1="155" x2="820" y2="155" stroke="#D4AF37" stroke-width="2"/>
+        <polygon points="813,150 825,155 813,160" fill="#D4AF37"/>
+        
+        <line x1="775" y1="200" x2="820" y2="200" stroke="#D4AF37" stroke-width="2" stroke-dasharray="4,2"/>
+        <polygon points="813,195 825,200 813,205" fill="#D4AF37"/>
+      </g>
+
+      <g id="protocolLabels">
+        <rect x="375" y="140" width="42" height="18" rx="4" fill="#0070F3"/>
+        <text x="396" y="152" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="500" fill="#ffffff">WebSocket</text>
+        
+        <rect x="375" y="162" width="42" height="18" rx="4" fill="#0070F3"/>
+        <text x="396" y="174" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="500" fill="#ffffff">REST API</text>
+        
+        <rect x="775" y="140" width="38" height="16" rx="3" fill="#D4AF37"/>
+        <text x="794" y="151" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="500" fill="#ffffff">gRPC</text>
+        
+        <rect x="775" y="185" width="38" height="16" rx="3" fill="#D4AF37"/>
+        <text x="794" y="196" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="500" fill="#ffffff">Internal</text>
+      </g>
+
+      <g id="deployment">
+        <rect x="30" y="295" width="1140" height="50" rx="8" fill="#f5f7fa" stroke="#e5e7eb" stroke-width="1"/>
+        <text x="60" y="318" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#0a0a0a">部署方式</text>
+        
+        <rect x="60" y="328" width="140" height="18" rx="5" fill="#2496ED"/>
+        <text x="130" y="341" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="500" fill="#ffffff">Docker Compose</text>
+        
+        <g id="deploymentIcons">
+          <rect x="240" y="308" width="65" height="28" rx="5" fill="#ffffff" stroke="#0070F3" stroke-width="1"/>
+          <text x="272" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#0070F3">Next.js 14</text>
+          <text x="272" y="330" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">Frontend</text>
+          
+          <rect x="320" y="308" width="65" height="28" rx="5" fill="#ffffff" stroke="#0070F3" stroke-width="1"/>
+          <text x="352" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#0070F3">FastAPI</text>
+          <text x="352" y="330" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">Backend</text>
+          
+          <rect x="400" y="308" width="65" height="28" rx="5" fill="#ffffff" stroke="#D4AF37" stroke-width="1"/>
+          <text x="432" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#D4AF37">PptxGenJS</text>
+          <text x="432" y="330" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">Renderer</text>
+          
+          <rect x="480" y="308" width="65" height="28" rx="5" fill="#ffffff" stroke="#28a745" stroke-width="1"/>
+          <text x="512" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#28a745">Redis</text>
+          <text x="512" y="330" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">Cache</text>
+          
+          <rect x="560" y="308" width="65" height="28" rx="5" fill="#ffffff" stroke="#8B5CF6" stroke-width="1"/>
+          <text x="592" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#8B5CF6">LLM API</text>
+          <text x="592" y="330" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#666666">OpenAI</text>
+        </g>
+        
+        <line x1="305" y1="322" x2="320" y2="322" stroke="#d1d5db" stroke-width="1"/>
+        <line x1="385" y1="322" x2="400" y2="322" stroke="#d1d5db" stroke-width="1"/>
+        <line x1="465" y1="322" x2="480" y2="322" stroke="#d1d5db" stroke-width="1"/>
+        <line x1="545" y1="322" x2="560" y2="322" stroke="#d1d5db" stroke-width="1"/>
+        
+        <text x="650" y="320" font-family="Arial, sans-serif" font-size="9" fill="#666666">|</text>
+        <text x="665" y="316" font-family="Arial, sans-serif" font-size="8" fill="#666666">一键部署</text>
+        <text x="665" y="328" font-family="Arial, sans-serif" font-size="8" fill="#666666">水平扩展</text>
+        <text x="730" y="316" font-family="Arial, sans-serif" font-size="8" fill="#666666">|</text>
+        <text x="745" y="316" font-family="Arial, sans-serif" font-size="8" fill="#666666">环境隔离</text>
+        <text x="745" y="328" font-family="Arial, sans-serif" font-size="8" fill="#666666">热更新</text>
+      </g>
+
+      <g id="legend">
+        <text x="30" y="365" font-family="Arial, sans-serif" font-size="10" font-weight="600" fill="#0a0a0a">图例说明</text>
+        
+        <line x1="30" y1="382" x2="55" y2="382" stroke="#0070F3" stroke-width="2"/>
+        <text x="62" y="386" font-family="Arial, sans-serif" font-size="9" fill="#666666">实时通信 (WebSocket)</text>
+        
+        <line x1="195" y1="382" x2="220" y2="382" stroke="#0070F3" stroke-width="2" stroke-dasharray="6,3"/>
+        <text x="228" y="386" font-family="Arial, sans-serif" font-size="9" fill="#666666">流式通信</text>
+        
+        <line x1="320" y1="382" x2="345" y2="382" stroke="#D4AF37" stroke-width="2"/>
+        <text x="352" y="386" font-family="Arial, sans-serif" font-size="9" fill="#666666">内部调用</text>
+        
+        <line x1="420" y1="382" x2="445" y2="382" stroke="#D4AF37" stroke-width="2" stroke-dasharray="4,2"/>
+        <text x="452" y="386" font-family="Arial, sans-serif" font-size="9" fill="#666666">异步处理</text>
+      </g>
+      
+      <g id="capabilityLegend">
+        <rect x="30" y="398" width="10" height="10" rx="2" fill="#E8F4FD"/>
+        <text x="45" y="407" font-family="Arial, sans-serif" font-size="8" fill="#666666">Web Deck 演示文稿</text>
+        
+        <rect x="160" y="398" width="10" height="10" rx="2" fill="#FEF9E8"/>
+        <text x="175" y="407" font-family="Arial, sans-serif" font-size="8" fill="#666666">Draw.io 流程图</text>
+        
+        <rect x="280" y="398" width="10" height="10" rx="2" fill="#E8F8F0"/>
+        <text x="295" y="407" font-family="Arial, sans-serif" font-size="8" fill="#666666">Web Sandbox</text>
+        
+        <rect x="400" y="398" width="10" height="10" rx="2" fill="#F5E8FD"/>
+        <text x="415" y="407" font-family="Arial, sans-serif" font-size="8" fill="#666666">智能文档</text>
+      </g>
+
+      <text x="1140" y="440" text-anchor="end" font-family="Arial, sans-serif" font-size="8" fill="#999999">PresentationAgent v1.0 | 三层微服务架构</text>
+    </svg>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p06" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:40px 48px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 页面标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:28px;color:#0a0a0a;font-weight:700;margin:0 0 8px 0;line-height:1.3;">
+    AgentFactory 动态构建机制
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#666666;margin:0 0 20px 0;">
+    核心架构 · AgentRuntime 驱动 · 动态上下文与中间件链配置
+  </p>
+  <div style="width:50px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+
+  <!-- 主内容区：3列卡片 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:20px;">
+    <!-- 卡片1：AgentContext 核心数据结构 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;background:#FAFAFA;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:code-braces" style="font-size:22px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0;font-weight:600;">AgentContext 数据结构</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#444444;line-height:1.6;margin:0 0 10px 0;">
+        动态生成的运行时上下文，包含任务描述、用户意图、附件内容、历史记忆等核心字段
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;color:#666666;">user_request</td><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;text-align:right;color:#0a0a0a;">String</td></tr>
+        <tr><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;color:#666666;">intent_type</td><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;text-align:right;color:#0a0a0a;">Enum</td></tr>
+        <tr><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;color:#666666;">attachments</td><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;text-align:right;color:#0a0a0a;">List[File]</td></tr>
+        <tr><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;color:#666666;">memory_context</td><td style="padding:4px 0;border-bottom:1px solid #E0E0E0;text-align:right;color:#0a0a0a;">Dict</td></tr>
+        <tr><td style="padding:4px 0;color:#666666;">token_budget</td><td style="padding:4px 0;text-align:right;color:#0a0a0a;">Integer</td></tr>
+      </table>
+    </div>
+
+    <!-- 卡片2：MiddlewareChain 配置化设计 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;background:#FAFAFA;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:buffer" style="font-size:22px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0;font-weight:600;">MiddlewareChain 配置化</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#444444;line-height:1.6;margin:0 0 10px 0;">
+        14层中间件链可按任务类型动态编排，支持插拔式配置与运行时组装
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#E3F2FD;color:#0070F3;padding:3px 8px;border-radius:3px;">MemoryCapture</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#E3F2FD;color:#0070F3;padding:3px 8px;border-radius:3px;">IntentDetection</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#E3F2FD;color:#0070F3;padding:3px 8px;border-radius:3px;">TokenBudget</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#FFF3E0;color:#E65100;padding:3px 8px;border-radius:3px;">LoopDetection</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#E8F5E9;color:#2E7D32;padding:3px 8px;border-radius:3px;">Checkpoint</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#F3E5F5;color:#7B1FA2;padding:3px 8px;border-radius:3px;">SubagentOrch</span>
+      </div>
+    </div>
+
+    <!-- 卡片3：动态构建流程 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;background:#FAFAFA;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:cog-sync" style="font-size:22px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0;font-weight:600;">动态构建流程</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#444444;line-height:1.6;margin:0 0 10px 0;">
+        AgentFactory 根据用户需求解析意图类型，动态组装 Context 与 Middleware 链
+      </p>
+      <div style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;line-height:1.8;">
+        <div><span style="color:#0070F3;font-weight:600;">①</span> 解析 user_request → intent_type</div>
+        <div><span style="color:#0070F3;font-weight:600;">②</span> 检索 memory_context</div>
+        <div><span style="color:#0070F3;font-weight:600;">③</span> 注入 attachments</div>
+        <div><span style="color:#0070F3;font-weight:600;">④</span> 配置 middleware_chain</div>
+        <div><span style="color:#0070F3;font-weight:600;">⑤</span> 交付 AgentRunner 执行</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部补充信息区 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+    <!-- 核心观点1 -->
+    <div style="border-left:3px solid #0070F3;padding-left:14px;">
+      <h4 style="font-family:'Times New Roman',serif;font-size:14px;color:#0a0a0a;margin:0 0 6px 0;font-weight:600;">Context Window 管理</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:0;line-height:1.5;">
+        默认 128K tokens，支持 compress_context 压缩机制，确保长对话场景下的上下文完整性
+      </p>
+    </div>
+
+    <!-- 核心观点2 -->
+    <div style="border-left:3px solid #D4AF37;padding-left:14px;">
+      <h4 style="font-family:'Times New Roman',serif;font-size:14px;color:#0a0a0a;margin:0 0 6px 0;font-weight:600;">流式 LLM 调用</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:0;line-height:1.5;">
+        AgentRuntime 通过 chat_stream 实现流式响应，支持实时 token 注入与增量生成
+      </p>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p08" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 页面标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:28px;color:#0a0a0a;font-weight:700;margin:0 0 8px 0;">
+    IntentDetectionMiddleware 解析自然语言意图，智能路由至核心能力模块
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#666666;margin:0 0 20px 0;">
+    意图检测与分发策略机制说明
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+  
+  <!-- 核心说明 -->
+  <div style="background:#f8f9fa;padding:16px 20px;border-left:3px solid #0070F3;border-radius:0 4px 4px 0;margin-bottom:24px;">
+    <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0a0a0a;line-height:1.7;margin:0;">
+      <strong style="color:#0070F3;">IntentDetectionMiddleware</strong> 是 14 层中间件链中的关键环节。它接收用户自然语言输入，通过 <span style="background:#e8f4fd;padding:2px 6px;border-radius:2px;font-size:12px;">语义理解 + 模式匹配</span> 双引擎解析用户真实意图，然后根据路由策略将请求分发到对应的核心能力模块（WebDeck/DrawIO/WebSandbox/智能文档）进行处理。
+    </p>
+  </div>
+
+  <!-- 三栏布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-bottom:20px;">
+    <!-- 卡片1: 意图检测实现机制 -->
+    <div style="border:1px solid #e0e0e0;border-radius:4px;padding:18px 20px;background:#ffffff;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:brain" style="font-size:22px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0a0a0a;font-weight:600;margin:0;">意图检测实现机制</h3>
+      </div>
+      <ul style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4a4a4a;line-height:1.8;margin:0;padding-left:16px;">
+        <li><strong>语义理解引擎</strong>：基于 LLM 进行语义理解，提取用户意图关键词</li>
+        <li><strong>模式匹配器</strong>：预定义意图模式库（创建/编辑/查询/生成等）</li>
+        <li><strong>上下文感知</strong>：结合对话历史和当前上下文进行意图校正</li>
+        <li><strong>置信度评估</strong>：输出意图置信度，低于阈值时触发澄清</li>
+      </ul>
+    </div>
+
+    <!-- 卡片2: 路由分发策略 -->
+    <div style="border:1px solid #e0e0e0;border-radius:4px;padding:18px 20px;background:#ffffff;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:router-wireless" style="font-size:22px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0a0a0a;font-weight:600;margin:0;">路由分发策略</h3>
+      </div>
+      <ul style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4a4a4a;line-height:1.8;margin:0;padding-left:16px;">
+        <li><strong>能力映射表</strong>：意图类型 → 核心能力模块的映射关系</li>
+        <li><strong>多意图处理</strong>：支持单次请求多意图拆分并发处理</li>
+        <li><strong>回退机制</strong>：无匹配时路由至通用处理模块</li>
+        <li><strong>动态权重</strong>：根据模块可用性和负载动态调整路由</li>
+      </ul>
+    </div>
+
+    <!-- 卡片3: 意图类型与路由对照 -->
+    <div style="border:1px solid #e0e0e0;border-radius:4px;padding:18px 20px;background:#ffffff;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:table-switch" style="font-size:22px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0a0a0a;font-weight:600;margin:0;">意图类型与路由对照</h3>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:11px;">
+        <tr style="background:#f5f5f5;">
+          <th style="border:1px solid #e0e0e0;padding:6px 8px;text-align:left;color:#666;">意图类型</th>
+          <th style="border:1px solid #e0e0e0;padding:6px 8px;text-align:left;color:#666;">目标模块</th>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;">创建演示文稿</td>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;color:#0070F3;font-weight:600;">WebDeck</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;">绘制流程图</td>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;color:#0070F3;font-weight:600;">DrawIO</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;">代码开发/测试</td>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;color:#0070F3;font-weight:600;">WebSandbox</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;">生成技术报告</td>
+          <td style="border:1px solid #e0e0e0;padding:6px 8px;color:#0070F3;font-weight:600;">智能文档</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- 处理流程图示 -->
+  <div style="display:flex;align-items:center;justify-content:space-between;background:#fafafa;padding:16px 24px;border-radius:4px;border:1px solid #e8e8e8;">
+    <div style="text-align:center;">
+      <iconify-icon icon="mdi:message-text" style="font-size:28px;color:#0a0a0a;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#666;margin:6px 0 0 0;">用户输入</p>
+    </div>
+    <div style="color:#ccc;font-size:20px;">→</div>
+    <div style="text-align:center;">
+      <iconify-icon icon="mdi:api" style="font-size:28px;color:#0070F3;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#666;margin:6px 0 0 0;">IntentDetection<br/>Middleware</p>
+    </div>
+    <div style="color:#ccc;font-size:20px;">→</div>
+    <div style="text-align:center;">
+      <iconify-icon icon="mdi:map-marker-path" style="font-size:28px;color:#D4AF37;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#666;margin:6px 0 0 0;">意图解析<br/>路由决策</p>
+    </div>
+    <div style="color:#ccc;font-size:20px;">→</div>
+    <div style="text-align:center;">
+      <iconify-icon icon="mdi:cube-outline" style="font-size:28px;color:#0a0a0a;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#666;margin:6px 0 0 0;">核心能力模块<br/>处理执行</p>
+    </div>
+  </div>
+
+  <!-- 底部统计信息 -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:20px;">
+    <div style="text-align:center;padding:12px;background:#f8f9fa;border-radius:4px;">
+      <span style="font-family:Arial,Roboto,sans-serif;font-size:24px;color:#0070F3;font-weight:700;">14</span>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#999;margin:4px 0 0 0;">中间件层数</p>
+    </div>
+    <div style="text-align:center;padding:12px;background:#f8f9fa;border-radius:4px;">
+      <span style="font-family:Arial,Roboto,sans-serif;font-size:24px;color:#0070F3;font-weight:700;">>90%</span>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#999;margin:4px 0 0 0;">意图识别准确率</p>
+    </div>
+    <div style="text-align:center;padding:12px;background:#f8f9fa;border-radius:4px;">
+      <span style="font-family:Arial,Roboto,sans-serif;font-size:24px;color:#0070F3;font-weight:700;">4</span>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#999;margin:4px 0 0 0;">目标核心模块</p>
+    </div>
+    <div style="text-align:center;padding:12px;background:#f8f9fa;border-radius:4px;">
+      <span style="font-family:Arial,Roboto,sans-serif;font-size:24px;color:#0070F3;font-weight:700;"><50ms</span>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#999;margin:4px 0 0 0;">路由响应延迟</p>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p09" class="deck-page" style="background-color: #ffffff; min-height: 100vh; padding: 20px; box-sizing: border-box; font-family: Arial, Roboto, 'Helvetica Neue', sans-serif; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <div class="deck-narrative-container" style="max-width: 1400px; margin: 0 auto;">
+    <h1 class="deck-title" style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; color: #0a0a0a; font-size: 32px; text-align: center; margin: 10px 0 8px 0; font-weight: 700;">WebDeck 编排系统概述</h1>
+    <div class="deck-core-message" style="text-align: center; margin-bottom: 12px;">
+      <p style="color: #0a0a0a; font-size: 14px; margin: 0; line-height: 1.5;">WebDeck 编排系统通过五大角色的串行协作，实现从需求到演示文稿的完整生成流程。</p>
+    </div>
+    <div class="deck-points-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px;">
+      <div class="deck-point-card" style="background-color: #ffffff; border: 1px solid #0070F3; border-radius: 8px; padding: 10px; text-align: center;">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; color: #0070F3; font-size: 13px; margin: 0 0 6px 0; font-weight: 600;">Director · 总控角色</h3>
+        <p style="color: #0a0a0a; font-size: 10px; margin: 0; line-height: 1.4;">接收用户需求，统筹全局工作流，管理 AgentContext 生命周期，调度下游角色执行任务。</p>
+      </div>
+      <div class="deck-point-card" style="background-color: #ffffff; border: 1px solid #0070F3; border-radius: 8px; padding: 10px; text-align: center;">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; color: #0070F3; font-size: 13px; margin: 0 0 6px 0; font-weight: 600;">Planner · 规划角色</h3>
+        <p style="color: #0a0a0a; font-size: 10px; margin: 0; line-height: 1.4;">分析需求意图，生成演示文稿结构大纲（Slide Outline），输出结构化 Brief 给下游角色。</p>
+      </div>
+      <div class="deck-point-card" style="background-color: #ffffff; border: 1px solid #0070F3; border-radius: 8px; padding: 10px; text-align: center;">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; color: #0070F3; font-size: 13px; margin: 0 0 6px 0; font-weight: 600;">Scheduler · 调度角色</h3>
+        <p style="color: #0a0a0a; font-size: 10px; margin: 0; line-height: 1.4;">基于 Lane 机制管理任务队列，实现多页面并行处理，控制系统并发度与资源分配。</p>
+      </div>
+      <div class="deck-point-card" style="background-color: #ffffff; border: 1px solid #0070F3; border-radius: 8px; padding: 10px; text-align: center;">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; color: #0070F3; font-size: 13px; margin: 0 0 6px 0; font-weight: 600;">Orchestrator · 编排角色</h3>
+        <p style="color: #0a0a0a; font-size: 10px; margin: 0; line-height: 1.4;">执行具体页面内容生成，调用中间件链处理上下文，生成单页 Slide 内容。</p>
+      </div>
+      <div class="deck-point-card" style="background-color: #ffffff; border: 1px solid #0070F3; border-radius: 8px; padding: 10px; text-align: center;">
+        <h3 style="font-family: 'Times New Roman', 'Garamond', Georgia, serif; color: #0070F3; font-size: 13px; margin: 0 0 6px 0; font-weight: 600;">Reviewer · 质检角色</h3>
+        <p style="color: #0a0a0a; font-size: 10px; margin: 0; line-height: 1.4;">校验生成内容质量，触发重试机制，支持 edit_deck_page 精准编辑与 regenerate 重新生成。</p>
+      </div>
+    </div>
+  </div>
+  <div class="deck-visual-wrapper deck-diagram-wrapper" style="max-width: 1400px; margin: 0 auto;">
+    <svg width="100%" height="420" viewBox="0 0 1200 420" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#0070F3"/>
+        </marker>
+      </defs>
+      
+      <!-- Title -->
+      <text x="600" y="30" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" font-weight="600" fill="#0a0a0a">WebDeck 编排系统五大角色协作流程</text>
+      
+      <!-- Role Cards -->
+      <!-- Director -->
+      <g transform="translate(40, 60)">
+        <rect x="0" y="0" width="200" height="300" rx="10" fill="#ffffff" stroke="#0070F3" stroke-width="2"/>
+        <rect x="0" y="0" width="200" height="50" rx="10" fill="#0070F3"/>
+        <text x="100" y="32" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#ffffff">Director</text>
+        
+        <text x="100" y="70" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">角色职责</text>
+        <text x="12" y="92" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 接收用户需求</tspan>
+          <tspan x="12" dy="14">• 解析演示意图</tspan>
+          <tspan x="12" dy="14">• 制定执行策略</tspan>
+          <tspan x="12" dy="14">• 协调全局流程</tspan>
+        </text>
+        
+        <line x1="15" y1="150" x2="185" y2="150" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="170" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出产物</text>
+        <text x="12" y="192" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 分析简报 (Brief)</tspan>
+          <tspan x="12" dy="14">• 执行计划</tspan>
+          <tspan x="12" dy="14">• 任务分解</tspan>
+        </text>
+        
+        <line x1="15" y1="235" x2="185" y2="235" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="255" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出至</text>
+        <text x="100" y="280" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0070F3">→ Planner</text>
+      </g>
+      
+      <!-- Planner -->
+      <g transform="translate(250, 60)">
+        <rect x="0" y="0" width="200" height="300" rx="10" fill="#ffffff" stroke="#0070F3" stroke-width="2"/>
+        <rect x="0" y="0" width="200" height="50" rx="10" fill="#0070F3"/>
+        <text x="100" y="32" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#ffffff">Planner</text>
+        
+        <text x="100" y="70" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">角色职责</text>
+        <text x="12" y="92" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 设计页面结构</tspan>
+          <tspan x="12" dy="14">• 规划内容布局</tspan>
+          <tspan x="12" dy="14">• 制定视觉策略</tspan>
+          <tspan x="12" dy="14">• 协调组件关系</tspan>
+        </text>
+        
+        <line x1="15" y1="150" x2="185" y2="150" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="170" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出产物</text>
+        <text x="12" y="192" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 页面大纲</tspan>
+          <tspan x="12" dy="14">• 内容框架</tspan>
+          <tspan x="12" dy="14">• 组件规格</tspan>
+        </text>
+        
+        <line x1="15" y1="235" x2="185" y2="235" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="255" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出至</text>
+        <text x="100" y="280" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0070F3">→ Scheduler</text>
+      </g>
+      
+      <!-- Scheduler -->
+      <g transform="translate(460, 60)">
+        <rect x="0" y="0" width="200" height="300" rx="10" fill="#ffffff" stroke="#0070F3" stroke-width="2"/>
+        <rect x="0" y="0" width="200" height="50" rx="10" fill="#0070F3"/>
+        <text x="100" y="32" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#ffffff">Scheduler</text>
+        
+        <text x="100" y="70" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">角色职责</text>
+        <text x="12" y="92" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• Lane 任务调度</tspan>
+          <tspan x="12" dy="14">• 并发控制管理</tspan>
+          <tspan x="12" dy="14">• 资源分配优化</tspan>
+          <tspan x="12" dy="14">• 执行顺序编排</tspan>
+        </text>
+        
+        <line x1="15" y1="150" x2="185" y2="150" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="170" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出产物</text>
+        <text x="12" y="192" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 调度计划</tspan>
+          <tspan x="12" dy="14">• 执行队列</tspan>
+          <tspan x="12" dy="14">• 依赖关系图</tspan>
+        </text>
+        
+        <line x1="15" y1="235" x2="185" y2="235" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="255" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出至</text>
+        <text x="100" y="280" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0070F3">→ Orchestrator</text>
+      </g>
+      
+      <!-- Orchestrator -->
+      <g transform="translate(670, 60)">
+        <rect x="0" y="0" width="200" height="300" rx="10" fill="#ffffff" stroke="#0070F3" stroke-width="2"/>
+        <rect x="0" y="0" width="200" height="50" rx="10" fill="#0070F3"/>
+        <text x="100" y="32" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#ffffff">Orchestrator</text>
+        
+        <text x="100" y="70" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">角色职责</text>
+        <text x="12" y="92" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 页面内容编排</tspan>
+          <tspan x="12" dy="14">• 组件协调调度</tspan>
+          <tspan x="12" dy="14">• 精准编辑控制</tspan>
+          <tspan x="12" dy="14">• 重新生成管理</tspan>
+        </text>
+        
+        <line x1="15" y1="150" x2="185" y2="150" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="170" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出产物</text>
+        <text x="12" y="192" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 页面内容块</tspan>
+          <tspan x="12" dy="14">• 组件配置</tspan>
+          <tspan x="12" dy="14">• 布局指令</tspan>
+        </text>
+        
+        <line x1="15" y1="235" x2="185" y2="235" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="255" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出至</text>
+        <text x="100" y="280" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0070F3">→ Reviewer</text>
+      </g>
+      
+      <!-- Reviewer -->
+      <g transform="translate(880, 60)">
+        <rect x="0" y="0" width="200" height="300" rx="10" fill="#ffffff" stroke="#0070F3" stroke-width="2"/>
+        <rect x="0" y="0" width="200" height="50" rx="10" fill="#0070F3"/>
+        <text x="100" y="32" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#ffffff">Reviewer</text>
+        
+        <text x="100" y="70" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">角色职责</text>
+        <text x="12" y="92" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 内容质量审查</tspan>
+          <tspan x="12" dy="14">• 格式校验评估</tspan>
+          <tspan x="12" dy="14">• 反馈修正建议</tspan>
+          <tspan x="12" dy="14">• 最终确认输出</tspan>
+        </text>
+        
+        <line x1="15" y1="150" x2="185" y2="150" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="170" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出产物</text>
+        <text x="12" y="192" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#0a0a0a">
+          <tspan x="12" dy="0">• 质检报告</tspan>
+          <tspan x="12" dy="14">• 修改建议</tspan>
+          <tspan x="12" dy="14">• 最终 PPTX</tspan>
+        </text>
+        
+        <line x1="15" y1="235" x2="185" y2="235" stroke="#f5f5f5" stroke-width="1"/>
+        
+        <text x="100" y="255" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#D4AF37">输出至</text>
+        <text x="100" y="280" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#D4AF37">✓ 完成</text>
+      </g>
+      
+      <!-- Connecting Arrows -->
+      <line x1="240" y1="210" x2="250" y2="210" stroke="#0070F3" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <line x1="450" y1="210" x2="460" y2="210" stroke="#0070F3" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <line x1="660" y1="210" x2="670" y2="210" stroke="#0070F3" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <line x1="870" y1="210" x2="880" y2="210" stroke="#0070F3" stroke-width="2" marker-end="url(#arrowhead)"/>
+      
+      <!-- Footer Note -->
+      <text x="600" y="400" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="10" fill="#666666">WebDeck 编排系统 · 五大角色串行协作 · 职责边界清晰 · 输出产物明确</text>
+    </svg>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p10" class="deck-page" style="width:100%;height:100%;background:#ffffff;padding:40px 48px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 顶部标题区 -->
+  <div style="margin-bottom:24px;">
+    <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:32px;color:#0a0a0a;font-weight:700;margin:0 0 8px 0;letter-spacing:-0.5px;">
+      Director：总控角色
+    </h1>
+    <p style="font-family:Arial,Roboto,sans-serif;font-size:14px;color:#666666;margin:0;">
+      编排系统总控入口 · 协调 Planner · Planner · Scheduler · Orchestrator · Reviewer 五大角色协同工作
+    </p>
+    <div style="width:64px;height:3px;background:#0070F3;margin-top:12px;"></div>
+  </div>
+
+  <!-- 主内容区 2列布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:28px;height:calc(100% - 110px);">
+
+    <!-- 左侧：核心职责定义 -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- 核心职责卡片1 -->
+      <div class="s-card" style="padding:18px 20px;background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;flex:1;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">
+          <iconify-icon icon="mdi:clipboard-check-outline" style="font-size:18px;vertical-align:middle;margin-right:8px;"></iconify-icon>
+          任务分解与指令下发
+        </h3>
+        <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#0a0a0a;line-height:1.7;margin:0;">
+          Director 接收用户意图后，将复杂任务拆解为原子化指令单元，通过标准化接口分发给 Planner 进行内容规划、Scheduler 进行资源调度、Orchestrator 进行页面编排、Reviewer 进行质量审核。
+        </p>
+        <div style="margin-top:10px;padding:8px 12px;background:#ffffff;border-left:3px solid #0070F3;border-radius:0 4px 4px 0;">
+          <span style="font-family:Arial,sans-serif;font-size:11px;color:#666666;">核心能力：</span>
+          <span style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;">意图理解 · 任务拆分 · 指令路由</span>
+        </div>
+      </div>
+
+      <!-- 核心职责卡片2 -->
+      <div class="s-card" style="padding:18px 20px;background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;flex:1;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">
+          <iconify-icon icon="mdi:sync-circle-outline" style="font-size:18px;vertical-align:middle;margin-right:8px;"></iconify-icon>
+          全局状态同步与协调
+        </h3>
+        <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#0a0a0a;line-height:1.7;margin:0;">
+          维护全局执行上下文，统一管理各角色的状态流转。实时监控任务执行进度，处理跨角色依赖关系，确保页面生成、图表绘制、沙盒构建等操作的时序正确性。
+        </p>
+        <div style="margin-top:10px;padding:8px 12px;background:#ffffff;border-left:3px solid #0070F3;border-radius:0 4px 4px 0;">
+          <span style="font-family:Arial,sans-serif;font-size:11px;color:#666666;">核心能力：</span>
+          <span style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;">状态管理 · 依赖调度 · 进度追踪</span>
+        </div>
+      </div>
+
+      <!-- 核心职责卡片3 -->
+      <div class="s-card" style="padding:16px 20px;background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0070F3;margin:0 0 8px 0;font-weight:600;">
+          <iconify-icon icon="mdi:alert-octagon-outline" style="font-size:17px;vertical-align:middle;margin-right:8px;"></iconify-icon>
+          异常处理与降级策略
+        </h3>
+        <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#0a0a0a;line-height:1.6;margin:0;">
+          捕获并处理子角色执行异常，实现优雅降级。支持自动重试机制，必要时触发回滚操作，保障系统整体可用性。
+        </p>
+      </div>
+    </div>
+
+    <!-- 右侧：五大角色协作架构 -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <h2 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:17px;color:#0a0a0a;margin:0 0 6px 0;font-weight:600;">
+        <iconify-icon icon="mdi:account-group-outline" style="font-size:20px;vertical-align:middle;margin-right:8px;color:#0070F3;"></iconify-icon>
+        五大角色协作架构
+      </h2>
+
+      <!-- Director 核心节点 -->
+      <div style="background:#0070F3;color:#ffffff;padding:14px 20px;border-radius:6px;text-align:center;">
+        <div style="font-family:'Times New Roman',Georgia,serif;font-size:15px;font-weight:700;margin-bottom:4px;">DIRECTOR</div>
+        <div style="font-family:Arial,sans-serif;font-size:11px;opacity:0.9;">总控协调器</div>
+      </div>
+
+      <!-- 箭头指示 -->
+      <div style="text-align:center;padding:4px 0;">
+        <iconify-icon icon="mdi:arrow-down-bold" style="font-size:24px;color:#0070F3;"></iconify-icon>
+      </div>
+
+      <!-- 四个子角色网格 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;flex:1;">
+        <!-- Planner -->
+        <div style="background:#ffffff;border:1px solid #0070F3;border-radius:6px;padding:14px 16px;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:#0070F3;color:#fff;font-family:Arial,sans-serif;font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;">PLANNER</div>
+          <h4 style="font-family:'Times New Roman',Georgia,serif;font-size:13px;color:#0a0a0a;margin:8px 0 6px 0;font-weight:600;">内容规划</h4>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;line-height:1.5;margin:0;">
+            结构化内容生成<br/>演示逻辑设计<br/>信息层级规划
+          </p>
+        </div>
+
+        <!-- Scheduler -->
+        <div style="background:#ffffff;border:1px solid #D4AF37;border-radius:6px;padding:14px 16px;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:#D4AF37;color:#fff;font-family:Arial,sans-serif;font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;">SCHEDULER</div>
+          <h4 style="font-family:'Times New Roman',Georgia,serif;font-size:13px;color:#0a0a0a;margin:8px 0 6px 0;font-weight:600;">Lane 调度</h4>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;line-height:1.5;margin:0;">
+            执行时序编排<br/>资源并行调度<br/>依赖关系管理
+          </p>
+        </div>
+
+        <!-- Orchestrator -->
+        <div style="background:#ffffff;border:1px solid #0070F3;border-radius:6px;padding:14px 16px;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:#0070F3;color:#fff;font-family:Arial,sans-serif;font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;">ORCHESTRATOR</div>
+          <h4 style="font-family:'Times New Roman',Georgia,serif;font-size:13px;color:#0a0a0a;margin:8px 0 6px 0;font-weight:600;">页面编排</h4>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;line-height:1.5;margin:0;">
+            页面元素布局<br/>样式模板匹配<br/>组件组合渲染
+          </p>
+        </div>
+
+        <!-- Reviewer -->
+        <div style="background:#ffffff;border:1px solid #D4AF37;border-radius:6px;padding:14px 16px;position:relative;">
+          <div style="position:absolute;top:-8px;left:12px;background:#D4AF37;color:#fff;font-family:Arial,sans-serif;font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600;">REVIEWER</div>
+          <h4 style="font-family:'Times New Roman',Georgia,serif;font-size:13px;color:#0a0a0a;margin:8px 0 6px 0;font-weight:600;">质量审核</h4>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;line-height:1.5;margin:0;">
+            内容一致性检查<br/>视觉质量评估<br/>合规性校验
+          </p>
+        </div>
+      </div>
+
+      <!-- 支持操作说明 -->
+      <div style="margin-top:8px;padding:12px 16px;background:#f5f5f5;border-radius:6px;border:1px solid #e0e0e0;">
+        <div style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin-bottom:8px;">Director 支持的核心操作</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <span class="s-badge" style="background:#0070F3;color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;">edit_deck_page</span>
+          <span class="s-badge" style="background:#D4AF37;color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;">regenerate_page</span>
+          <span class="s-badge" style="background:#0070F3;color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;">retry_failed</span>
+          <span class="s-badge" style="background:#D4AF37;color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;">batch_generate</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p11" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 页面标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:28px;color:#0a0a0a;font-weight:700;margin:0 0 4px 0;">
+    Planner：规划角色
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#666666;margin:0 0 16px 0;">
+    WebDeck 编排系统 · 核心职责详解
+  </p>
+  <div style="width:50px;height:3px;background:#0070F3;margin-bottom:20px;"></div>
+
+  <!-- 核心观点概述 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;background:#fafafa;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0070F3;margin:0 0 6px 0;font-weight:600;">核心职责</h3>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;line-height:1.5;margin:0;">
+        分析用户输入需求，生成完整的内容与结构规划，输出 <span style="background:#e6f0ff;padding:1px 4px;border-radius:2px;">DeckManifest</span> 文档
+      </p>
+    </div>
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;background:#fafafa;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0070F3;margin:0 0 6px 0;font-weight:600;">工作流程</h3>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;line-height:1.5;margin:0;">
+        接收 Director 指令 → 解析需求 → 规划内容结构 → 生成 DeckManifest → 传递给 Orchestrator
+      </p>
+    </div>
+  </div>
+
+  <!-- Planner 输出结构详解 -->
+  <div style="border:1px solid #E0E0E0;border-radius:4px;padding:16px 18px;margin-bottom:16px;">
+    <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0 0 12px 0;font-weight:600;">DeckManifest 输出结构</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+      <div style="border-left:3px solid #0070F3;padding-left:10px;">
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:0 0 4px 0;">page_count</p>
+        <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;margin:0;font-weight:600;">总页数规划</p>
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:4px 0 0 0;">确定 Deck 包含的页面总量</p>
+      </div>
+      <div style="border-left:3px solid #0070F3;padding-left:10px;">
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:0 0 4px 0;">page_specs</p>
+        <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;margin:0;font-weight:600;">页面规格清单</p>
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:4px 0 0 0;">每个页面的类型、标题、内容摘要</p>
+      </div>
+      <div style="border-left:3px solid #0070F3;padding-left:10px;">
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:0 0 4px 0;">content_outline</p>
+        <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;margin:0;font-weight:600;">内容大纲</p>
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;margin:4px 0 0 0;">各页面的核心论点和数据要点</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 关键能力说明 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">需求解析能力</h3>
+      <ul style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;line-height:1.6;margin:0;padding-left:16px;">
+        <li>理解用户意图和演示目标</li>
+        <li>识别关键信息点和数据需求</li>
+        <li>确定内容优先级和层次结构</li>
+        <li>评估技术可行性和资源需求</li>
+      </ul>
+    </div>
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">规划输出能力</h3>
+      <ul style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;line-height:1.6;margin:0;padding-left:16px;">
+        <li>生成结构化 DeckManifest 文档</li>
+        <li>定义每页的类型和内容要点</li>
+        <li>规划页面间的逻辑流转关系</li>
+        <li>输出可执行的编排指令集</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 底部说明 -->
+  <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-family:Arial,sans-serif;font-size:10px;color:#999999;">Planner → Orchestrator → Reviewer</span>
+    <span style="font-family:Arial,sans-serif;font-size:10px;color:#0070F3;">WebDeck Orchestration System</span>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p12" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 主标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:27px;color:#0a0a0a;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    Scheduler：根据页面依赖关系进行 Lane 划分，支持并行生成独立页面
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#666666;margin:0 0 12px 0;">
+    详解 Lane 调度机制与并行处理策略 · 核心技术实现
+  </p>
+  <div style="width:56px;height:3px;background:#0070F3;margin-bottom:16px;"></div>
+
+  <!-- 横向流程图：Lane调度四步 -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;">
+    <div style="flex:1;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px;padding:10px 12px;text-align:center;">
+      <iconify-icon icon="mdi:graph-outline" style="font-size:18px;color:#0070F3;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:4px 0 0 0;">依赖分析</p>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#666666;margin:2px 0 0 0;">DependencyGraph</p>
+    </div>
+    <iconify-icon icon="mdi:arrow-right" style="font-size:14px;color:#cccccc;"></iconify-icon>
+    <div style="flex:1;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px;padding:10px 12px;text-align:center;">
+      <iconify-icon icon="mdi:layers-triple" style="font-size:18px;color:#0070F3;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:4px 0 0 0;">拓扑分层</p>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#666666;margin:2px 0 0 0;">Kahn算法</p>
+    </div>
+    <iconify-icon icon="mdi:arrow-right" style="font-size:14px;color:#cccccc;"></iconify-icon>
+    <div style="flex:1;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px;padding:10px 12px;text-align:center;">
+      <iconify-icon icon="mdi:road" style="font-size:18px;color:#0070F3;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:4px 0 0 0;">Lane分配</p>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#666666;margin:2px 0 0 0;">LaneAssigner</p>
+    </div>
+    <iconify-icon icon="mdi:arrow-right" style="font-size:14px;color:#cccccc;"></iconify-icon>
+    <div style="flex:1;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:4px;padding:10px 12px;text-align:center;">
+      <iconify-icon icon="mdi:play-circle" style="font-size:18px;color:#0070F3;"></iconify-icon>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:4px 0 0 0;">并行执行</p>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#666666;margin:2px 0 0 0;">SyncBarrier</p>
+    </div>
+  </div>
+
+  <!-- 2列核心信息 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <!-- 核心观点1 -->
+    <div style="border:1px solid #e0e0e0;border-radius:4px;padding:14px 16px;background:#ffffff;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0070F3;font-weight:700;margin:0 0 8px 0;">
+        Lane 调度核心逻辑
+      </h3>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#0a0a0a;line-height:1.6;margin:0 0 10px 0;">
+        Scheduler 将 DAG 依赖图按拓扑序划分为多个 <strong>Lane</strong>，同一 Lane 内页面无依赖可并行执行，跨 Lane 需等待前置 Lane 完成。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:11px;">
+        <tr style="background:#f9f9f9;">
+          <th style="border:1px solid #e0e0e0;padding:6px 8px;text-align:left;color:#0a0a0a;font-weight:600;">阶段</th>
+          <th style="border:1px solid #e0e0e0;padding:6px 8px;text-align:left;color:#0a0a0a;font-weight:600;">组件</th>
+          <th style="border:1px solid #e0e0e0;padding:6px 8px;text-align:left;color:#0a0a0a;font-weight:600;">作用</th>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">依赖建模</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#0070F3;font-weight:600;">DependencyGraph</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">构建页面间DAG</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">分层排序</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#0070F3;font-weight:600;">TopoSorter</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">Kahn算法拓扑排序</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">并行分组</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#0070F3;font-weight:600;">LaneAssigner</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">分配至同一Lane</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">执行同步</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#0070F3;font-weight:600;">SyncBarrier</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">跨Lane同步等待</td>
+        </tr>
+        <tr>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">异常重试</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#0070F3;font-weight:600;">RetryController</td>
+          <td style="border:1px solid #e0e0e0;padding:5px 8px;color:#333333;">失败页面重调度</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 核心观点2 -->
+    <div style="border:1px solid #e0e0e0;border-radius:4px;padding:14px 16px;background:#ffffff;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0070F3;font-weight:700;margin:0 0 8px 0;">
+        并行处理策略与优势
+      </h3>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#0a0a0a;line-height:1.6;margin:0 0 12px 0;">
+        通过 Lane 划分实现多页面并行生成，最大化利用 GPU/IO 资源，显著缩短整体生成时间。
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="background:#f8f8f8;border-left:3px solid #0070F3;padding:8px 10px;">
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0070F3;font-weight:700;margin:0;">资源利用率</p>
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#333333;margin:4px 0 0 0;">同一 Lane 页面共享 GPU 显存，减少上下文切换</p>
+        </div>
+        <div style="background:#f8f8f8;border-left:3px solid #D4AF37;padding:8px 10px;">
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#D4AF37;font-weight:700;margin:0;">容错恢复</p>
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#333333;margin:4px 0 0 0;">单页失败不影响同Lane其他页面，独立重试</p>
+        </div>
+        <div style="background:#f8f8f8;border-left:3px solid #0070F3;padding:8px 10px;">
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0070F3;font-weight:700;margin:0;">负载均衡</p>
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#333333;margin:4px 0 0 0;">动态分配策略避免单点瓶颈</p>
+        </div>
+        <div style="background:#f8f8f8;border-left:3px solid #D4AF37;padding:8px 10px;">
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#D4AF37;font-weight:700;margin:0;">时间优化</p>
+          <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#333333;margin:4px 0 0 0;">10页并行生成耗时约为串行的 30-40%</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- text_block: Kahn算法说明 -->
+  <div style="border:1px solid #e0e0e0;border-radius:4px;padding:12px 16px;background:#f9f9f9;">
+    <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0a0a0a;font-weight:700;margin:0 0 6px 0;">
+      Kahn 算法简要说明
+    </h4>
+    <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#333333;line-height:1.6;margin:0;">
+      <strong>算法思想：</strong>每次选择入度为 0 的节点（无前置依赖），将其加入当前 Lane；移除该节点后更新后续节点入度，重复此过程直至所有节点分配完毕。<br/>
+      <strong>PresentationAgent 实现：</strong>TopoSorter 对 14 层中间件链的输出页面依赖图执行 Kahn 排序，输出有序 Lane 列表供 LaneAssigner 分配资源。
+    </p>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p13" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- So What 完整结论标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:24px;color:#0a0a0a;font-weight:700;margin:0 0 4px 0;">
+    Orchestrator 将 Planner 的 manifest 转换为可渲染的页面内容，实现细粒度编排控制
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#9E9E9E;margin:0 0 12px 0;">
+    页面级编排机制 · 将结构化 manifest 转化为最终渲染输出
+  </p>
+  <div style="width:56px;height:2px;background:#0070F3;margin-bottom:16px;"></div>
+
+  <!-- 主内容区：2列布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;">
+    <!-- 左侧：核心职责与流程 -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <!-- 核心职责卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0070F3;margin:0 0 8px 0;font-weight:600;">核心职责</h3>
+        <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+          接收 Planner 生成的 manifest（页面结构、组件顺序、数据绑定），解析后调用对应渲染器生成最终页面内容。支持组件级编辑与增量更新。
+        </p>
+      </div>
+
+      <!-- 5步编排流程图 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">页面编排流程</h3>
+        <div style="display:flex;align-items:center;gap:6px;font-family:Arial,Roboto,sans-serif;font-size:10px;">
+          <div style="flex:1;background:#f0f0f0;padding:6px 4px;border-radius:3px;text-align:center;">
+            <span style="color:#0a0a0a;font-weight:600;">1</span><br><span style="color:#666;">解析Manifest</span>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:12px;color:#999;"></iconify-icon>
+          <div style="flex:1;background:#f0f0f0;padding:6px 4px;border-radius:3px;text-align:center;">
+            <span style="color:#0a0a0a;font-weight:600;">2</span><br><span style="color:#666;">组件映射</span>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:12px;color:#999;"></iconify-icon>
+          <div style="flex:1;background:#f0f0f0;padding:6px 4px;border-radius:3px;text-align:center;">
+            <span style="color:#0a0a0a;font-weight:600;">3</span><br><span style="color:#666;">数据注入</span>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:12px;color:#999;"></iconify-icon>
+          <div style="flex:1;background:#f0f0f0;padding:6px 4px;border-radius:3px;text-align:center;">
+            <span style="color:#0a0a0a;font-weight:600;">4</span><br><span style="color:#666;">布局计算</span>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:12px;color:#999;"></iconify-icon>
+          <div style="flex:1;background:#0070F3;padding:6px 4px;border-radius:3px;text-align:center;">
+            <span style="color:#fff;font-weight:600;">5</span><br><span style="color:#fff;">渲染输出</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 错误处理机制 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 16px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0a0a0a;margin:0 0 6px 0;font-weight:600;">典型错误处理</h3>
+        <div style="display:flex;flex-direction:column;gap:4px;font-family:Arial,Roboto,sans-serif;font-size:10px;color:#4A4A4A;">
+          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;">
+            <span>组件缺失</span>
+            <span style="color:#D4AF37;">→ 回退至默认占位符</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;">
+            <span>数据绑定失败</span>
+            <span style="color:#D4AF37;">→ 标记为待重试</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0;">
+            <span>渲染超时</span>
+            <span style="color:#D4AF37;">→ 触发降级策略</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：状态追踪与并发限制 -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <!-- 编排状态追踪表格 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">页面编排状态追踪</h3>
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:10px;">
+          <thead>
+            <tr style="background:#f8f8f8;">
+              <th style="border-bottom:1px solid #E0E0E0;padding:5px 6px;text-align:left;color:#666;font-weight:600;">页面ID</th>
+              <th style="border-bottom:1px solid #E0E0E0;padding:5px 6px;text-align:left;color:#666;font-weight:600;">Manifest</th>
+              <th style="border-bottom:1px solid #E0E0E0;padding:5px 6px;text-align:center;color:#666;font-weight:600;">状态</th>
+              <th style="border-bottom:1px solid #E0E0E0;padding:5px 6px;text-align:right;color:#666;font-weight:600;">耗时</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;color:#0a0a0a;">page_01</td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;color:#666;">title_block</td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;text-align:center;"><span style="background:#e6f7e6;color:#22c55e;padding:2px 6px;border-radius:2px;font-size:9px;">完成</span></td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;text-align:right;color:#666;">124ms</td>
+            </tr>
+            <tr>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;color:#0a0a0a;">page_02</td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;color:#666;">3col_grid</td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;text-align:center;"><span style="background:#e6f7e6;color:#22c55e;padding:2px 6px;border-radius:2px;font-size:9px;">完成</span></td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;text-align:right;color:#666;">218ms</td>
+            </tr>
+            <tr>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;color:#0a0a0a;">page_03</td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;color:#666;">chart_block</td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;text-align:center;"><span style="background:#fff3e0;color:#f97316;padding:2px 6px;border-radius:2px;font-size:9px;">处理中</span></td>
+              <td style="border-bottom:1px solid #f0f0f0;padding:5px 6px;text-align:right;color:#666;">--</td>
+            </tr>
+            <tr>
+              <td style="padding:5px 6px;color:#0a0a0a;">page_04</td>
+              <td style="padding:5px 6px;color:#666;">table_block</td>
+              <td style="padding:5px 6px;text-align:center;"><span style="background:#fee2e2;color:#ef4444;padding:2px 6px;border-radius:2px;font-size:9px;">失败</span></td>
+              <td style="padding:5px 6px;text-align:right;color:#666;">--</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 并发编排限制 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 16px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">并发编排限制</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="background:#f8f8f8;padding:8px;border-radius:3px;text-align:center;">
+            <div style="font-family:Arial,Roboto,sans-serif;font-size:18px;color:#0070F3;font-weight:700;">≤5</div>
+            <div style="font-family:Arial,Roboto,sans-serif;font-size:9px;color:#666;">最大并发页面数</div>
+          </div>
+          <div style="background:#f8f8f8;padding:8px;border-radius:3px;text-align:center;">
+            <div style="font-family:Arial,Roboto,sans-serif;font-size:18px;color:#0070F3;font-weight:700;">30s</div>
+            <div style="font-family:Arial,Roboto,sans-serif;font-size:9px;color:#666;">单页渲染超时</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 内容组装机制说明 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 16px;flex:1;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0a0a0a;margin:0 0 6px 0;font-weight:600;">内容组装机制</h3>
+        <ul style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#4A4A4A;margin:0;padding-left:14px;line-height:1.6;">
+          <li>组件库注册：预定义卡片、表格、图表等渲染组件</li>
+          <li>模板匹配：根据 manifest.type 匹配对应渲染模板</li>
+          <li>数据填充：将 Planner 输出注入模板占位符</li>
+          <li>样式计算：依据父容器约束计算子元素尺寸</li>
+          <li>输出序列化：生成可被 Reviewer 校验的中间格式</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部信息栏 -->
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #E0E0E0;">
+    <div style="display:flex;align-items:center;gap:16px;font-family:Arial,Roboto,sans-serif;font-size:10px;color:#999;">
+      <span><iconify-icon icon="mdi:layer-group" style="font-size:12px;vertical-align:middle;margin-right:4px;"></iconify-icon>Orchestrator</span>
+      <span><iconify-icon icon="mdi:file-document-outline" style="font-size:12px;vertical-align:middle;margin-right:4px;"></iconify-icon>Page Orchestration</span>
+    </div>
+    <div style="font-family:Arial,Roboto,sans-serif;font-size:10px;color:#999;">
+      WebDeck 编排系统 · 页面级内容组装
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p14" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:40px 52px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:26px;color:#0a0a0a;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    Reviewer 质检机制确保输出质量达标准，提供修改建议与重试支持
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#666666;margin:0 0 12px 0;">
+    详解 Reviewer 的质量检查维度 · 反馈机制与重试流程
+  </p>
+  <div style="width:56px;height:3px;background:#0070F3;margin-bottom:18px;"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;height:calc(100% - 85px);">
+    <!-- 左侧列 -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <!-- 角色定位卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:6px;padding:16px 18px;background:#FAFAFA;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <iconify-icon icon="mdi:shield-check" style="font-size:22px;color:#0070F3;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:700;">角色定位</h3>
+        </div>
+        <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.7;margin:0;">
+          Reviewer 是 WebDeck 编排系统的最终质检节点，在 Orchestrator 完成页面编排后介入，对生成内容进行多维度评估，确保输出符合质量标准并可交付。
+        </p>
+        <div style="margin-top:10px;padding:8px 10px;background:#F0F7FF;border-radius:4px;border-left:3px solid #0070F3;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#333;margin:0;line-height:1.5;">
+            <strong style="color:#0070F3;">质检时机：</strong>页面生成后首次质检 → 发现问题触发重试 → 重试后再次质检 → 通过则进入交付流程
+          </p>
+        </div>
+      </div>
+
+      <!-- 质量检查维度卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:6px;padding:16px 18px;flex:1;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <iconify-icon icon="mdi:clipboard-check-outline" style="font-size:22px;color:#D4AF37;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:700;">质量检查六大维度</h3>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="padding:8px 10px;background:#f5f5f5;border-radius:4px;">
+            <p style="font-family:Arial,sans-serif;font-size:11px;color:#0070F3;font-weight:600;margin:0 0 3px 0;">内容完整性</p>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:0;line-height:1.4;">检查核心信息是否完整无遗漏，关键数据点是否呈现</p>
+          </div>
+          <div style="padding:8px 10px;background:#f5f5f5;border-radius:4px;">
+            <p style="font-family:Arial,sans-serif;font-size:11px;color:#0070F3;font-weight:600;margin:0 0 3px 0;">逻辑一致性</p>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:0;line-height:1.4;">验证页面间逻辑连贯，层级结构清晰无矛盾</p>
+          </div>
+          <div style="padding:8px 10px;background:#f5f5f5;border-radius:4px;">
+            <p style="font-family:Arial,sans-serif;font-size:11px;color:#0070F3;font-weight:600;margin:0 0 3px 0;">视觉规范性</p>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:0;line-height:1.4;">布局比例、字体大小、间距符合设计规范</p>
+          </div>
+          <div style="padding:8px 10px;background:#f5f5f5;border-radius:4px;">
+            <p style="font-family:Arial,sans-serif;font-size:11px;color:#0070F3;font-weight:600;margin:0 0 3px 0;">格式正确性</p>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:0;line-height:1.4;">PPT/PDF 导出格式正确，无渲染异常</p>
+          </div>
+          <div style="padding:8px 10px;background:#f5f5f5;border-radius:4px;">
+            <p style="font-family:Arial,sans-serif;font-size:11px;color:#0070F3;font-weight:600;margin:0 0 3px 0;">数据准确性</p>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:0;line-height:1.4;">数据引用、统计数值与源文件一致</p>
+          </div>
+          <div style="padding:8px 10px;background:#f5f5f5;border-radius:4px;">
+            <p style="font-family:Arial,sans-serif;font-size:11px;color:#0070F3;font-weight:600;margin:0 0 3px 0;">可读性评估</p>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:0;line-height:1.4;">文字表达清晰度、图表可理解性达标</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧列 -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <!-- 反馈机制卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:6px;padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <iconify-icon icon="mdi:message-reply-outline" style="font-size:22px;color:#0070F3;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:700;">反馈与建议机制</h3>
+        </div>
+        <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;">
+          质检未通过时，Reviewer 生成详细修改建议，包含问题定位与优化方向。
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <tr>
+            <th style="border-bottom:1px solid #E0E0E0;padding:6px 8px;text-align:left;color:#9E9E9E;font-weight:500;">反馈类型</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:6px 8px;text-align:left;color:#9E9E9E;font-weight:500;">说明</th>
+          </tr>
+          <tr>
+            <td style="padding:6px 8px;color:#0a0a0a;border-bottom:1px solid #f0f0f0;"><span style="background:#FFEBEE;color:#D32F2F;padding:2px 6px;border-radius:3px;font-size:10px;">阻断性问题</span></td>
+            <td style="padding:6px 8px;color:#666;border-bottom:1px solid #f0f0f0;">必须修复，否则无法进入下一步</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 8px;color:#0a0a0a;border-bottom:1px solid #f0f0f0;"><span style="background:#FFF3E0;color:#E65100;padding:2px 6px;border-radius:3px;font-size:10px;">优化建议</span></td>
+            <td style="padding:6px 8px;color:#666;border-bottom:1px solid #f0f0f0;">建议性修改，提升质量但非强制</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 8px;color:#0a0a0a;"><span style="background:#E8F5E9;color:#2E7D32;padding:2px 6px;border-radius:3px;font-size:10px;">质检通过</span></td>
+            <td style="padding:6px 8px;color:#666;">内容达标，可进入交付流程</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 重试机制卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:6px;padding:16px 18px;flex:1;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <iconify-icon icon="mdi:refresh-circle" style="font-size:22px;color:#D4AF37;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:700;">重试支持能力</h3>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#f5f5f5;border-radius:5px;">
+            <iconify-icon icon="mdi:pencil-outline" style="font-size:18px;color:#0070F3;margin-top:2px;"></iconify-icon>
+            <div>
+              <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;font-weight:600;margin:0 0 3px 0;">edit_deck_page</p>
+              <p style="font-family:Arial,sans-serif;font-size:11px;color:#666;margin:0;line-height:1.4;">精准编辑指定页面，保留其他已通过质检的内容</p>
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#f5f5f5;border-radius:5px;">
+            <iconify-icon icon="mdi:autorenew" style="font-size:18px;color:#0070F3;margin-top:2px;"></iconify-icon>
+            <div>
+              <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;font-weight:600;margin:0 0 3px 0;">regenerate_deck_page</p>
+              <p style="font-family:Arial,sans-serif;font-size:11px;color:#666;margin:0;line-height:1.4;">重新生成单页内容，基于修改建议优化输出</p>
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#f5f5f5;border-radius:5px;">
+            <iconify-icon icon="mdi:restore" style="font-size:18px;color:#0070F3;margin-top:2px;"></iconify-icon>
+            <div>
+              <p style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;font-weight:600;margin:0 0 3px 0;">retry_failed_deck_pages</p>
+              <p style="font-family:Arial,sans-serif;font-size:11px;color:#666;margin:0;line-height:1.4;">批量重试失败页面，自动应用上轮反馈进行优化</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 质检流程图示 -->
+      <div style="border:1px solid #E0E0E0;border-radius:6px;padding:14px 16px;background:#FAFAFA;">
+        <p style="font-family:'Times New Roman',serif;font-size:13px;color:#0a0a0a;font-weight:600;margin:0 0 8px 0;">质检流程</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="text-align:center;">
+            <div style="width:36px;height:36px;background:#0070F3;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 4px;">
+              <span style="font-family:Arial,sans-serif;font-size:12px;color:#fff;font-weight:600;">1</span>
+            </div>
+            <p style="font-family:Arial,sans-serif;font-size:9px;color:#666;margin:0;">生成内容</p>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:14px;color:#D4AF37;"></iconify-icon>
+          <div style="text-align:center;">
+            <div style="width:36px;height:36px;background:#D4AF37;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 4px;">
+              <span style="font-family:Arial,sans-serif;font-size:12px;color:#fff;font-weight:600;">2</span>
+            </div>
+            <p style="font-family:Arial,sans-serif;font-size:9px;color:#666;margin:0;">质检评估</p>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:14px;color:#D4AF37;"></iconify-icon>
+          <div style="text-align:center;">
+            <div style="width:36px;height:36px;background:#FF9800;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 4px;">
+              <span style="font-family:Arial,sans-serif;font-size:12px;color:#fff;font-weight:600;">3</span>
+            </div>
+            <p style="font-family:Arial,sans-serif;font-size:9px;color:#666;margin:0;">反馈建议</p>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:14px;color:#D4AF37;"></iconify-icon>
+          <div style="text-align:center;">
+            <div style="width:36px;height:36px;background:#4CAF50;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 4px;">
+              <span style="font-family:Arial,sans-serif;font-size:12px;color:#fff;font-weight:600;">✓</span>
+            </div>
+            <p style="font-family:Arial,sans-serif;font-size:9px;color:#666;margin:0;">通过交付</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p15" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:26px;color:#0a0a0a;font-weight:700;margin:0 0 6px 0;">
+    智能工作区提供四大核心能力，覆盖技术团队全链路文档需求
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#9E9E9E;margin:0 0 16px 0;">
+    一站式完成演示文稿、流程图、应用原型与技术报告 · 数据截至 2024Q3
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+  
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+    <!-- 核心能力1: Web Deck 演示文稿 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:presentation" style="font-size:24px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0;font-weight:700;">Web Deck 演示文稿</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 12px 0;">
+        基于 PptxGenJS 渲染引擎生成原生 .pptx 文件，支持精准页面编辑与重新生成
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">输出格式</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">.pptx</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">渲染引擎</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">PptxGenJS</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;">编辑粒度</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;">单页/区块级</td></tr>
+      </table>
+    </div>
+    
+    <!-- 核心能力2: Draw.io 流程图 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:流程图-outline" style="font-size:24px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0;font-weight:700;">Draw.io 流程图</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 12px 0;">
+        生成 draw.io 兼容的 XML 结构化流程图，支持跨平台编辑与导出
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">输出格式</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">.xml</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">兼容平台</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">draw.io/LibreOffice</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;">图表类型</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;">流程/架构/时序</td></tr>
+      </table>
+    </div>
+    
+    <!-- 核心能力3: Web Sandbox 应用 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:application-brackets" style="font-size:24px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0;font-weight:700;">Web Sandbox 应用</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 12px 0;">
+        使用 React+TypeScript+Tailwind+shadcn/ui 构建可交互的单页应用原型
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">技术栈</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">React+TS</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">UI框架</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">shadcn/ui</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;">部署模式</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;">沙盒预览</td></tr>
+      </table>
+    </div>
+    
+    <!-- 核心能力4: 智能文档 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:file-document-outline" style="font-size:24px;color:#0070F3;margin-right:10px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:16px;color:#0a0a0a;margin:0;font-weight:700;">智能文档</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 12px 0;">
+        支持 Markdown 技术报告自动生成，结构化输出符合企业规范的技术文档
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">输出格式</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">.md</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;border-bottom:1px solid #E0E0E0;">渲染引擎</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;border-bottom:1px solid #E0E0E0;">Markdown</td></tr>
+        <tr><td style="padding:4px 0;color:#9E9E9E;">文档类型</td>
+            <td style="padding:4px 0;text-align:right;color:#0a0a0a;">技术报告</td></tr>
+      </table>
+    </div>
+  </div>
+  
+  <!-- 底部补充说明区域 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 18px;background:#fafafa;">
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        <strong style="color:#0a0a0a;">统一的 AgentRuntime 引擎</strong> — 通过 AgentFactory 动态构建 MiddlewareChain，支持流式 LLM 调用与上下文压缩机制
+      </p>
+    </div>
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 18px;background:#fafafa;">
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        <strong style="color:#0a0a0a;">双 Store 状态管理</strong> — deckStore 管理项目状态，chatStore 管理对话状态，WebSocket 实时通信，二进制文件 Base64 传输
+      </p>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p16" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:28px;color:#0a0a0a;font-weight:700;margin:0 0 8px 0;">
+    核心能力一：Web Deck 演示文稿
+  </h1>
+  <p style="font-family:Arial,Roboto,'Helvetica Neue',sans-serif;font-size:14px;color:#666666;margin:0 0 20px 0;">
+    基于 PptxGenJS 渲染引擎的原生 .pptx 文件生成方案
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+  
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0070F3;margin:0 0 10px 0;">PptxGenJS 渲染引擎</h3>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        纯 JavaScript 编写的 PowerPoint 生成库，直接在 Node.js 环境中创建原生 .pptx 文件，无需依赖 Microsoft Office 组件。支持完整的形状、图表、SmartArt 和多媒体元素渲染。
+      </p>
+      <div style="margin-top:12px;display:flex;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f7ff;color:#0070F3;padding:3px 8px;border-radius:2px;">Node.js 运行时</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f7ff;color:#0070F3;padding:3px 8px;border-radius:2px;">无 Office 依赖</span>
+      </div>
+    </div>
+    
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0070F3;margin:0 0 10px 0;">完整格式与动画支持</h3>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        支持 PPTX 规范中的全部格式属性：字体样式、段落对齐、背景填充、渐变色、阴影效果。动画系统支持进入、强调、退出三类动画，支持触发器和多动画组合。
+      </p>
+      <div style="margin-top:12px;display:flex;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f7ff;color:#0070F3;padding:3px 8px;border-radius:2px;">进入动画</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f7ff;color:#0070F3;padding:3px 8px;border-radius:2px;">强调动画</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f7ff;color:#0070F3;padding:3px 8px;border-radius:2px;">退出动画</span>
+      </div>
+    </div>
+    
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:16px;color:#0070F3;margin:0 0 10px 0;">流式生成与传输</h3>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        后端流式写入 PPTX 文件，二进制数据通过 WebSocket Base64 编码传输至前端。文件生成完成后直接触发浏览器下载，完整保留文件元数据和内部结构。
+      </p>
+      <div style="margin-top:12px;display:flex;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f7ff;color:#0070F3;padding:3px 8px;border-radius:2px;">WebSocket</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f7ff;color:#0070F3;padding:3px 8px;border-radius:2px;">Base64</span>
+      </div>
+    </div>
+  </div>
+  
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0 0 12px 0;">WebDeck 页面编排流程</h3>
+      <div style="display:flex;align-items:center;gap:12px;font-family:Arial,Roboto,sans-serif;font-size:12px;">
+        <div style="flex:1;background:#f5f5f5;padding:12px;border-radius:4px;text-align:center;">
+          <div style="color:#0070F3;font-weight:600;margin-bottom:4px;">Director</div>
+          <div style="color:#666;font-size:11px;">总控调度</div>
+        </div>
+        <span style="color:#ccc;">→</span>
+        <div style="flex:1;background:#f5f5f5;padding:12px;border-radius:4px;text-align:center;">
+          <div style="color:#0070F3;font-weight:600;margin-bottom:4px;">Planner</div>
+          <div style="color:#666;font-size:11px;">内容规划</div>
+        </div>
+        <span style="color:#ccc;">→</span>
+        <div style="flex:1;background:#f5f5f5;padding:12px;border-radius:4px;text-align:center;">
+          <div style="color:#0070F3;font-weight:600;margin-bottom:4px;">Scheduler</div>
+          <div style="color:#666;font-size:11px;">Lane 调度</div>
+        </div>
+        <span style="color:#ccc;">→</span>
+        <div style="flex:1;background:#f5f5f5;padding:12px;border-radius:4px;text-align:center;">
+          <div style="color:#0070F3;font-weight:600;margin-bottom:4px;">Orchestrator</div>
+          <div style="color:#666;font-size:11px;">页面编排</div>
+        </div>
+        <span style="color:#ccc;">→</span>
+        <div style="flex:1;background:#f5f5f5;padding:12px;border-radius:4px;text-align:center;">
+          <div style="color:#0070F3;font-weight:600;margin-bottom:4px;">Reviewer</div>
+          <div style="color:#666;font-size:11px;">质量审查</div>
+        </div>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#666;margin:12px 0 0 0;">
+        五角色协同完成从需求理解到最终 PPTX 输出的完整闭环，支持 edit_deck_page 精准编辑、regenerate_deck_page 重新生成、retry_failed_deck_pages 重试失败页面
+      </p>
+    </div>
+    
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0a0a0a;margin:0 0 12px 0;">技术规格</h3>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,Roboto,sans-serif;font-size:11px;">
+        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #eee;">渲染引擎</td><td style="padding:6px 0;color:#0a0a0a;border-bottom:1px solid #eee;font-weight:600;">PptxGenJS</td></tr>
+        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #eee;">输出格式</td><td style="padding:6px 0;color:#0a0a0a;border-bottom:1px solid #eee;font-weight:600;">.pptx (ISO 29500)</td></tr>
+        <tr><td style="padding:6px 0;color:#666;border-bottom:1px solid #eee;">动画支持</td><td style="padding:6px 0;color:#0a0a0a;border-bottom:1px solid #eee;font-weight:600;">三类全支持</td></tr>
+        <tr><td style="padding:6px 0;color:#666;">传输协议</td><td style="padding:6px 0;color:#0a0a0a;font-weight:600;">WebSocket+Base64</td></tr>
+      </table>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p17" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:22px;color:#0a0a0a;font-weight:700;margin:0 0 4px 0;">
+    我们生成 draw.io 兼容的 XML 流程图，实现跨平台无缝编辑
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#9E9E9E;margin:0 0 12px 0;">
+    基于 XML 结构化输出的流程图自动生成引擎 · 100% draw.io 兼容性
+  </p>
+  <div style="width:50px;height:2px;background:#0070F3;margin-bottom:14px;"></div>
+
+  <!-- 核心观点区域 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;background:#fafafa;">
+      <div style="display:flex;align-items:center;margin-bottom:6px;">
+        <iconify-icon icon="mdi:code-braces" style="font-size:16px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0a0a0a;margin:0;">结构化 XML 输出</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+        生成标准 <span style="color:#0070F3;font-weight:600;">mxGraph XML</span> 格式，完整保留节点、连线、样式、布局信息，支持跨平台导入
+      </p>
+    </div>
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;background:#fafafa;">
+      <div style="display:flex;align-items:center;margin-bottom:6px;">
+        <iconify-icon icon="mdi:draw" style="font-size:16px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0a0a0a;margin:0;">原生 draw.io 编辑</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+        生成的 XML 可直接拖入 draw.io 编辑器，无缝衔接手动修改，保留全部自定义元素
+      </p>
+    </div>
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;background:#fafafa;">
+      <div style="display:flex;align-items:center;margin-bottom:6px;">
+        <iconify-icon icon="mdi:cog-sync" style="font-size:16px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0a0a0a;margin:0;">双向同步机制</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+        支持 XML 与可视化状态实时互转，机器生成与人工编辑结果可相互覆盖
+      </p>
+    </div>
+  </div>
+
+  <!-- 技术实现详情 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0070F3;margin:0 0 8px 0;border-bottom:1px solid #E0E0E0;padding-bottom:6px;">
+        XML 数据结构规范
+      </h3>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:9px;">
+        <tr><th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:left;color:#9E9E9E;">元素层级</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:left;color:#9E9E9E;">描述</th></tr>
+        <tr><td style="border-bottom:1px solid #f0f0f0;padding:4px 0;color:#0a0a0a;font-weight:600;">mxGraph</td>
+            <td style="border-bottom:1px solid #f0f0f0;padding:4px 0;color:#4A4A4A;">根容器，定义画布属性</td></tr>
+        <tr><td style="border-bottom:1px solid #f0f0f0;padding:4px 0;color:#0a0a0a;font-weight:600;">mxCell</td>
+            <td style="border-bottom:1px solid #f0f0f0;padding:4px 0;color:#4A4A4A;">节点/连线基本单元</td></tr>
+        <tr><td style="border-bottom:1px solid #f0f0f0;padding:4px 0;color:#0a0a0a;font-weight:600;">@style</td>
+            <td style="border-bottom:1px solid #f0f0f0;padding:4px 0;color:#4A4A4A;">颜色、边框、字体样式</td></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;font-weight:600;">@value</td>
+            <td style="padding:4px 0;color:#4A4A4A;">节点显示文本内容</td></tr>
+      </table>
+    </div>
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0070F3;margin:0 0 8px 0;border-bottom:1px solid #E0E0E0;padding-bottom:6px;">
+        生成流程
+      </h3>
+      <div style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.6;">
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
+          <span style="display:inline-block;width:16px;height:16px;background:#0070F3;color:#fff;border-radius:50%;text-align:center;line-height:16px;font-size:9px;margin-right:6px;">1</span>
+          <span>LLM 解析语义 → 提取实体与关系</span>
+        </div>
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
+          <span style="display:inline-block;width:16px;height:16px;background:#0070F3;color:#fff;border-radius:50%;text-align:center;line-height:16px;font-size:9px;margin-right:6px;">2</span>
+          <span>映射为 mxCell 节点/连线对象</span>
+        </div>
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
+          <span style="display:inline-block;width:16px;height:16px;background:#0070F3;color:#fff;border-radius:50%;text-align:center;line-height:16px;font-size:9px;margin-right:6px;">3</span>
+          <span>应用预设样式模板（颜色/字体）</span>
+        </div>
+        <div style="display:flex;align-items:center;">
+          <span style="display:inline-block;width:16px;height:16px;background:#0070F3;color:#fff;border-radius:50%;text-align:center;line-height:16px;font-size:9px;margin-right:6px;">4</span>
+          <span>序列化为 XML 字符串输出</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 兼容性说明 -->
+  <div style="border-left:3px solid #D4AF37;background:#FFFEF5;padding:10px 12px;margin-bottom:12px;">
+    <h4 style="font-family:'Times New Roman',serif;font-size:12px;color:#0a0a0a;margin:0 0 4px 0;">
+      <iconify-icon icon="mdi:lightbulb" style="font-size:14px;color:#D4AF37;margin-right:4px;"></iconify-icon>XML 兼容性说明
+    </h4>
+    <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+      生成的 XML 符合 draw.io / diagrams.net 标准 schema，支持导入 <strong>draw.io、Lucidchart、Gliffy、Confluence 绘图插件</strong>等所有兼容 mxGraph 格式的工具。输出文件扩展名为 <span style="background:#f0f0f0;padding:1px 4px;border-radius:2px;">.xml</span>，可双击直接在系统draw.io中打开编辑。
+    </p>
+  </div>
+
+  <!-- 技术指标 -->
+  <div style="display:flex;gap:20px;border-top:1px solid #E0E0E0;padding-top:10px;">
+    <div style="text-align:center;flex:1;">
+      <div style="font-family:Arial,sans-serif;font-size:18px;color:#0070F3;font-weight:700;">100%</div>
+      <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">draw.io 兼容率</div>
+    </div>
+    <div style="text-align:center;flex:1;">
+      <div style="font-family:Arial,sans-serif;font-size:18px;color:#0070F3;font-weight:700;">12+</div>
+      <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">支持图形类型</div>
+    </div>
+    <div style="text-align:center;flex:1;">
+      <div style="font-family:Arial,sans-serif;font-size:18px;color:#0070F3;font-weight:700;">50+</div>
+      <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">预置样式模板</div>
+    </div>
+    <div style="text-align:center;flex:1;">
+      <div style="font-family:Arial,sans-serif;font-size:18px;color:#0070F3;font-weight:700;">&lt;2s</div>
+      <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">单图生成耗时</div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p18" class="deck-page" style="width:100%;height:100%;background:#ffffff;padding:40px 48px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- So What 标题 -->
+  <h1 style="font-family:'Times New Roman','Garamond',Georgia,serif;font-size:24px;color:#0a0a0a;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    Web Sandbox 实现实时预览与交互，开发效率提升60%以上
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#666666;margin:0 0 12px 0;">
+    基于 React + TypeScript + Tailwind 构建的可视化沙盒环境 · 核心技术架构
+  </p>
+  <div style="width:50px;height:3px;background:#0070F3;margin-bottom:18px;"></div>
+
+  <!-- 核心信息 Banner -->
+  <div style="display:flex;align-items:center;gap:12px;background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;padding:12px 16px;margin-bottom:18px;">
+    <iconify-icon icon="mdi:lightbulb" style="font-size:20px;color:#0070F3;flex-shrink:0;"></iconify-icon>
+    <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0a0a0a;margin:0;line-height:1.5;">
+      <strong>Web Sandbox</strong> 是 PresentationAgent 的交互式应用构建平台，采用 React + TypeScript + Tailwind CSS + shadcn/ui 技术栈，支持在浏览器端实时预览和调试单页应用，实现「编写-预览-迭代」的闭环开发体验。
+    </p>
+  </div>
+
+  <!-- 三栏核心能力 Grid -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;">
+    <!-- 卡片1: 技术栈 -->
+    <div style="border:1px solid #e0e0e0;border-radius:6px;padding:16px 18px;background:#ffffff;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:code-braces" style="font-size:18px;color:#0070F3;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Georgia,serif;font-size:15px;color:#0a0a0a;font-weight:700;margin:0;">现代技术栈</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4a4a4a;line-height:1.6;margin:0 0 10px 0;">
+        采用业界领先的前端技术组合，构建高性能、可维护的单页应用
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#0070F3;color:#ffffff;padding:3px 8px;border-radius:3px;">React 18</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#3178c6;color:#ffffff;padding:3px 8px;border-radius:3px;">TypeScript</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#06b6d4;color:#ffffff;padding:3px 8px;border-radius:3px;">Tailwind CSS</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#0a0a0a;color:#ffffff;padding:3px 8px;border-radius:3px;">shadcn/ui</span>
+      </div>
+    </div>
+
+    <!-- 卡片2: 组件库 -->
+    <div style="border:1px solid #e0e0e0;border-radius:6px;padding:16px 18px;background:#ffffff;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:view-dashboard" style="font-size:18px;color:#0070F3;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Georgia,serif;font-size:15px;color:#0a0a0a;font-weight:700;margin:0;">企业级组件库</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4a4a4a;line-height:1.6;margin:0 0 10px 0;">
+        基于 Radix UI 的无障碍组件库，提供 50+ 精心设计的 UI 组件
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:3px 8px;border-radius:3px;">Button</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:3px 8px;border-radius:3px;">Dialog</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:3px 8px;border-radius:3px;">Table</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:3px 8px;border-radius:3px;">Form</span>
+      </div>
+    </div>
+
+    <!-- 卡片3: 交互能力 -->
+    <div style="border:1px solid #e0e0e0;border-radius:6px;padding:16px 18px;background:#ffffff;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:gamepad-variant" style="font-size:18px;color:#0070F3;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',Georgia,serif;font-size:15px;color:#0a0a0a;font-weight:700;margin:0;">实时交互能力</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4a4a4a;line-height:1.6;margin:0 0 10px 0;">
+        支持热模块替换 (HMR)，代码修改即时生效，无需刷新页面
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:3px 8px;border-radius:3px;">HMR</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:3px 8px;border-radius:3px;">Live Edit</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:3px 8px;border-radius:3px;">State Debug</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 实时预览机制详解 -->
+  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-bottom:16px;">
+    <!-- 左侧: 实时预览架构 -->
+    <div style="border:1px solid #e0e0e0;border-radius:6px;padding:16px 18px;background:#ffffff;">
+      <h3 style="font-family:'Times New Roman',Georgia,serif;font-size:14px;color:#0a0a0a;font-weight:700;margin:0 0 12px 0;display:flex;align-items:center;gap:8px;">
+        <iconify-icon icon="mdi:monitor" style="font-size:16px;color:#0070F3;"></iconify-icon>
+        实时预览机制
+      </h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="background:#f8f9fa;padding:10px 12px;border-radius:4px;border-left:3px solid #0070F3;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:0 0 4px 0;">双向通信协议</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;margin:0;line-height:1.5;">基于 WebSocket 实现编辑器与预览窗口的实时同步</p>
+        </div>
+        <div style="background:#f8f9fa;padding:10px 12px;border-radius:4px;border-left:3px solid #D4AF37;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:0 0 4px 0;">即时反馈渲染</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;margin:0;line-height:1.5;">代码变更后毫秒级响应，实时预览运行效果</p>
+        </div>
+        <div style="background:#f8f9fa;padding:10px 12px;border-radius:4px;border-left:3px solid #0070F3;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:0 0 4px 0;">状态同步机制</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;margin:0;line-height:1.5;">React 状态与预览窗口全局状态实时保持一致</p>
+        </div>
+        <div style="background:#f8f9fa;padding:10px 12px;border-radius:4px;border-left:3px solid #D4AF37;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;font-weight:600;margin:0 0 4px 0;">错误边界处理</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666666;margin:0;line-height:1.5;">运行时错误捕获隔离，单组件崩溃不影响整体</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧: 技术架构层 -->
+    <div style="border:1px solid #e0e0e0;border-radius:6px;padding:16px 18px;background:#ffffff;">
+      <h3 style="font-family:'Times New Roman',Georgia,serif;font-size:14px;color:#0a0a0a;font-weight:700;margin:0 0 12px 0;display:flex;align-items:center;gap:8px;">
+        <iconify-icon icon="mdi:layers-triple" style="font-size:16px;color:#0070F3;"></iconify-icon>
+        四层技术架构
+      </h3>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:70px;font-family:Arial,sans-serif;font-size:10px;color:#666666;flex-shrink:0;">UI Layer</div>
+          <div style="flex:1;background:#0070F3;padding:6px 10px;border-radius:3px;">
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#ffffff;margin:0;">React Components + Tailwind</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:70px;font-family:Arial,sans-serif;font-size:10px;color:#666666;flex-shrink:0;">Sandbox</div>
+          <div style="flex:1;background:#06b6d4;padding:6px 10px;border-radius:3px;">
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#ffffff;margin:0;">iFrame 隔离 + CSP 安全策略</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:70px;font-family:Arial,sans-serif;font-size:10px;color:#666666;flex-shrink:0;">Runtime</div>
+          <div style="flex:1;background:#D4AF37;padding:6px 10px;border-radius:3px;">
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#ffffff;margin:0;">Babel 编译 + HMR 引擎</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:70px;font-family:Arial,sans-serif;font-size:10px;color:#666666;flex-shrink:0;">Resource</div>
+          <div style="flex:1;background:#10b981;padding:6px 10px;border-radius:3px;">
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#ffffff;margin:0;">Asset 加载 + CDN 分发</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部: 性能优化与场景 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <!-- 左: 性能优化 -->
+    <div style="border:1px solid #e0e0e0;border-radius:6px;padding:14px 16px;background:#ffffff;">
+      <h3 style="font-family:'Times New Roman',Georgia,serif;font-size:13px;color:#0a0a0a;font-weight:700;margin:0 0 10px 0;">性能优化策略</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="display:flex;align-items:flex-start;gap:6px;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#10b981;flex-shrink:0;margin-top:1px;"></iconify-icon>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#4a4a4a;margin:0;line-height:1.5;">组件按需加载 (Code Splitting)</p>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:6px;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#10b981;flex-shrink:0;margin-top:1px;"></iconify-icon>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#4a4a4a;margin:0;line-height:1.5;">虚拟 DOM 增量渲染</p>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:6px;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#10b981;flex-shrink:0;margin-top:1px;"></iconify-icon>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#4a4a4a;margin:0;line-height:1.5;">Webpack 5 Module Federation</p>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:6px;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#10b981;flex-shrink:0;margin-top:1px;"></iconify-icon>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#4a4a4a;margin:0;line-height:1.5;">CDN 静态资源加速</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右: 适用场景 -->
+    <div style="border:1px solid #e0e0e0;border-radius:6px;padding:14px 16px;background:#ffffff;">
+      <h3 style="font-family:'Times New Roman',Georgia,serif;font-size:13px;color:#0a0a0a;font-weight:700;margin:0 0 10px 0;">典型应用场景</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:4px 10px;border-radius:12px;border:1px solid #e0e0e0;">交互式表单</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:4px 10px;border-radius:12px;border:1px solid #e0e0e0;">数据看板</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:4px 10px;border-radius:12px;border:1px solid #e0e0e0;">配置面板</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:4px 10px;border-radius:12px;border:1px solid #e0e0e0;">可视化图表</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:4px 10px;border-radius:12px;border:1px solid #e0e0e0;">实时编辑器</span>
+        <span style="font-family:Arial,sans-serif;font-size:10px;background:#f0f0f0;color:#0a0a0a;padding:4px 10px;border-radius:12px;border:1px solid #e0e0e0;">原型演示</span>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p19" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 页面标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:28px;color:#0a0a0a;font-weight:700;margin:0 0 8px 0;">
+    核心能力四：智能文档生成
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#9E9E9E;margin:0 0 20px 0;">
+    基于 Markdown 的结构化技术报告自动生成引擎
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+
+  <!-- 主内容区：2列布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;height:calc(100% - 120px);">
+    
+    <!-- 左侧：核心观点与技术特性 -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- 核心观点1 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px;flex:1;">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+          <iconify-icon icon="mdi:file-document-outline" style="font-size:24px;color:#0070F3;margin-right:10px;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:17px;color:#0a0a0a;margin:0;font-weight:600;">Markdown 原生渲染引擎</h3>
+        </div>
+        <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.7;margin:0 0 12px 0;">
+          内置 Markdown 解析器，支持 GFM (GitHub Flavored Markdown) 完整语法，包括代码高亮、表格、任务列表、数学公式 (KaTeX)、脚注等高级特性。
+        </p>
+        <div style="background:#f5f5f5;padding:10px;border-radius:3px;">
+          <code style="font-family:'Courier New',monospace;font-size:11px;color:#0a0a0a;">```python<br>&nbsp;&nbsp;def generate_report():<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return "技术报告"</code>
+        </div>
+      </div>
+
+      <!-- 核心观点2 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px;flex:1;">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+          <iconify-icon icon="mdi:format-list-bulleted" style="font-size:24px;color:#0070F3;margin-right:10px;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:17px;color:#0a0a0a;margin:0;font-weight:600;">结构化文档输出规范</h3>
+        </div>
+        <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.7;margin:0;">
+          自动生成符合技术文档标准的输出结构，包含：摘要、目录、章节层级、图表清单、参考文献等标准化模块。
+        </p>
+        <!-- 输出格式说明 -->
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid #E0E0E0;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0070F3;font-weight:600;margin:0 0 6px 0;">支持的输出格式：</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="s-badge" style="background:#0070F3;color:#fff;padding:3px 8px;border-radius:2px;font-size:10px;font-family:Arial,sans-serif;">.md</span>
+            <span class="s-badge" style="background:#0a0a0a;color:#fff;padding:3px 8px;border-radius:2px;font-size:10px;font-family:Arial,sans-serif;">.html</span>
+            <span class="s-badge" style="background:#D4AF37;color:#fff;padding:3px 8px;border-radius:2px;font-size:10px;font-family:Arial,sans-serif;">.pdf</span>
+            <span class="s-badge" style="background:#4A4A4A;color:#fff;padding:3px 8px;border-radius:2px;font-size:10px;font-family:Arial,sans-serif;">.docx</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：技术实现细节 -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <!-- 技术实现卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px;flex:1;">
+        <div style="display:flex;align-items:center;margin-bottom:14px;">
+          <iconify-icon icon="mdi:cog-outline" style="font-size:24px;color:#0070F3;margin-right:10px;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:17px;color:#0a0a0a;margin:0;font-weight:600;">技术实现架构</h3>
+        </div>
+        
+        <!-- 流程图示 -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding:12px;background:#f9f9f9;border-radius:4px;">
+          <div style="text-align:center;">
+            <iconify-icon icon="mdi:brain" style="font-size:20px;color:#0070F3;"></iconify-icon>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;margin:4px 0 0 0;">LLM 分析</p>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:16px;color:#9E9E9E;"></iconify-icon>
+          <div style="text-align:center;">
+            <iconify-icon icon="mdi:code-braces" style="font-size:20px;color:#0070F3;"></iconify-icon>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;margin:4px 0 0 0;">Markdown 解析</p>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:16px;color:#9E9E9E;"></iconify-icon>
+          <div style="text-align:center;">
+            <iconify-icon icon="mdi:file-export" style="font-size:20px;color:#0070F3;"></iconify-icon>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;margin:4px 0 0 0;">格式转换</p>
+          </div>
+          <iconify-icon icon="mdi:arrow-right" style="font-size:16px;color:#9E9E9E;"></iconify-icon>
+          <div style="text-align:center;">
+            <iconify-icon icon="mdi:check-circle" style="font-size:20px;color:#22c55e;"></iconify-icon>
+            <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;margin:4px 0 0 0;">输出交付</p>
+          </div>
+        </div>
+
+        <!-- 技术要点表格 -->
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+          <tr style="background:#f5f5f5;">
+            <th style="border:1px solid #E0E0E0;padding:8px;text-align:left;color:#0a0a0a;font-weight:600;">模块</th>
+            <th style="border:1px solid #E0E0E0;padding:8px;text-align:left;color:#0a0a0a;font-weight:600;">功能描述</th>
+          </tr>
+          <tr>
+            <td style="border:1px solid #E0E0E0;padding:8px;color:#4A4A4A;">Parser Engine</td>
+            <td style="border:1px solid #E0E0E0;padding:8px;color:#0a0a0a;">Markdown 语法解析与 AST 转换</td>
+          </tr>
+          <tr style="background:#fafafa;">
+            <td style="border:1px solid #E0E0E0;padding:8px;color:#4A4A4A;">Template Manager</td>
+            <td style="border:1px solid #E0E0E0;padding:8px;color:#0a0a0a;">技术报告模板动态加载与渲染</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #E0E0E0;padding:8px;color:#4A4A4A;">Export Pipeline</td>
+            <td style="border:1px solid #E0E0E0;padding:8px;color:#0a0a0a;">多格式输出转换 (MD/HTML/PDF)</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 核心优势总结 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:16px;background:#f9f9f9;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:14px;color:#0a0a0a;margin:0 0 10px 0;font-weight:600;">核心优势</h4>
+        <ul style="margin:0;padding-left:18px;font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.8;">
+          <li>一键生成完整技术报告，无需人工排版</li>
+          <li>支持自定义模板，适配企业文档规范</li>
+          <li>自动目录生成与章节序号编排</li>
+          <li>代码块智能高亮与语言识别</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p20" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 页面标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:26px;color:#0a0a0a;font-weight:700;margin:0 0 6px 0;">
+    工具系统支持页面级细粒度修改，实现精准内容控制
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#9E9E9E;margin:0 0 20px 0;">
+    智能工作区提供三大编辑工具，覆盖完整页面生命周期
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+
+  <!-- 核心观点区 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:28px;">
+    <!-- 观点1 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:pencil-outline" style="font-size:20px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">edit_deck_page</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        精准编辑指定页面内容，支持替换文本、调整布局、更新数据，适用于单页微调需求
+      </p>
+    </div>
+
+    <!-- 观点2 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:refresh" style="font-size:20px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">regenerate_deck_page</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        重新生成指定页面，基于最新上下文和约束条件重新计算布局与内容
+      </p>
+    </div>
+
+    <!-- 观点3 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:retry" style="font-size:20px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">retry_failed_deck_pages</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0;">
+        批量重试失败页面，自动诊断错误原因并重新执行生成流程
+      </p>
+    </div>
+  </div>
+
+  <!-- 使用场景说明区 -->
+  <h2 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:18px;color:#0a0a0a;font-weight:600;margin:0 0 14px 0;">
+    编辑工具典型使用场景
+  </h2>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <!-- 场景1 -->
+    <div style="border-left:3px solid #0070F3;padding-left:14px;">
+      <h4 style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0a0a0a;font-weight:600;margin:0 0 6px 0;">文本内容微调</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;line-height:1.5;margin:0;">
+        当页面中某段描述需要更新术语、补充数据或调整措辞时，使用 edit_deck_page 定位目标页面进行精准替换，无需重新生成整份文档
+      </p>
+    </div>
+
+    <!-- 场景2 -->
+    <div style="border-left:3px solid #0070F3;padding-left:14px;">
+      <h4 style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0a0a0a;font-weight:600;margin:0 0 6px 0;">布局结构优化</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;line-height:1.5;margin:0;">
+        某些页面首次生成效果不理想（如图表比例失调、信息分布不均），使用 regenerate_deck_page 重新计算布局参数，获得更优呈现效果
+      </p>
+    </div>
+
+    <!-- 场景3 -->
+    <div style="border-left:3px solid #0070F3;padding-left:14px;">
+      <h4 style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0a0a0a;font-weight:600;margin:0 0 6px 0;">错误页面修复</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;line-height:1.5;margin:0;">
+        生成过程中因网络超时、API限制等导致部分页面失败，调用 retry_failed_deck_pages 自动重试，系统自动记录失败原因并优化重试策略
+      </p>
+    </div>
+
+    <!-- 场景4 -->
+    <div style="border-left:3px solid #0070F3;padding-left:14px;">
+      <h4 style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#0a0a0a;font-weight:600;margin:0 0 6px 0;">批量模板更新</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;line-height:1.5;margin:0;">
+        需要统一修改多页的页眉样式、配色方案或字体设置时，批量调用 edit_deck_page 实现全局一致性调整，大幅提升编辑效率
+      </p>
+    </div>
+  </div>
+
+  <!-- 底部补充说明 -->
+  <div style="margin-top:24px;padding:14px 18px;background:#f8f9fa;border-radius:4px;border:1px solid #e9ecef;">
+    <p style="font-family:Arial,sans-serif;font-size:11px;color:#666666;line-height:1.6;margin:0;">
+      <strong style="color:#0a0a0a;">技术实现：</strong>三大工具通过 AgentRuntime 的 Orchestrator 模块协调工作，支持 page_id 精确索引定位，实现最小粒度的内容修改、最优的资源利用和完整的错误追溯能力
+    </p>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p21" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:26px;color:#0a0a0a;font-weight:700;margin:0 0 6px 0;">
+    双 Store 架构配合 WebSocket 实现高效实时通信
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#9E9E9E;margin:0 0 16px 0;">
+    状态管理机制与通信协议设计 · 基于 PresentationAgent 核心架构研究报告
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:20px;"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:16px 18px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:folder-multiple" style="font-size:22px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">deckStore 项目状态</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;">
+        管理演示文稿项目完整生命周期，包含页面元数据、模板配置、生成进度、文件资源等
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;color:#666;">状态字段</td><td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">pages / templates / progress</td></tr>
+        <tr><td style="padding:4px 0;color:#666;border-top:1px solid #E0E0E0;">更新频率</td><td style="padding:4px 0;text-align:right;color:#0a0a0a;border-top:1px solid #E0E0E0;">实时同步</td></tr>
+      </table>
+    </div>
+
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:16px 18px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:chat-processing" style="font-size:22px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">chatStore 对话状态</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;">
+        管理用户交互会话上下文，维护对话历史、Token预算控制、上下文窗口压缩机制
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;color:#666;">上下文窗口</td><td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">128K tokens</td></tr>
+        <tr><td style="padding:4px 0;color:#666;border-top:1px solid #E0E0E0;">压缩机制</td><td style="padding:4px 0;text-align:right;color:#0a0a0a;border-top:1px solid #E0E0E0;">compress_context</td></tr>
+      </table>
+    </div>
+
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:16px 18px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:access-point-network" style="font-size:22px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">WebSocket 实时通信</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;">
+        全双工长连接协议，实现流式响应推送、PPTX二进制文件Base64编码传输、进度实时反馈
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+        <tr><td style="padding:4px 0;color:#666;">传输格式</td><td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">Base64 / Stream</td></tr>
+        <tr><td style="padding:4px 0;color:#666;border-top:1px solid #E0E0E0;">心跳检测</td><td style="padding:4px 0;text-align:right;color:#0a0a0a;border-top:1px solid #E0E0E0;">30s 间隔</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:16px 18px;">
+      <h4 style="font-family:'Times New Roman',serif;font-size:14px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">Store 职责划分</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:#f8f9fa;padding:10px;border-radius:3px;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;margin:0;font-weight:600;">deckStore</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:4px 0 0 0;">deckMetadata、pageArray、currentPage、templateConfig、generatedFiles</p>
+        </div>
+        <div style="background:#f8f9fa;padding:10px;border-radius:3px;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;margin:0;font-weight:600;">chatStore</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:4px 0 0 0;">messages、tokenUsage、contextWindow、loopDetection、subagentState</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:16px 18px;">
+      <h4 style="font-family:'Times New Roman',serif;font-size:14px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">WebSocket 消息类型</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="background:#f8f9fa;padding:10px;border-radius:3px;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;margin:0;font-weight:600;">服务端推送</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:4px 0 0 0;">chunk、complete、error、progress</p>
+        </div>
+        <div style="background:#f8f9fa;padding:10px;border-radius:3px;">
+          <p style="font-family:Arial,sans-serif;font-size:11px;color:#0a0a0a;margin:0;font-weight:600;">客户端请求</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#666;margin:4px 0 0 0;">chat_stream、generate_pptx、upload_file</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f5f5f5;border-radius:4px;">
+    <div style="display:flex;align-items:center;">
+      <iconify-icon icon="mdi:check-circle" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+      <span style="font-family:Arial,sans-serif;font-size:12px;color:#0a0a0a;">双 Store 架构实现了状态隔离与业务关注点分离</span>
+    </div>
+    <div style="display:flex;align-items:center;">
+      <span style="font-family:Arial,sans-serif;font-size:11px;color:#666;">连接状态:</span>
+      <span style="font-family:Arial,sans-serif;font-size:11px;color:#22c55e;margin-left:6px;font-weight:600;">已连接</span>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p22" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 标题区 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:26px;color:#0a0a0a;font-weight:700;margin:0 0 4px 0;">
+    Docker Compose 一键部署方案，支持服务独立扩展与 128K tokens Context Window
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#666666;margin:0 0 14px 0;">
+    容器化部署架构 · 资源弹性配置 · 智能上下文管理
+  </p>
+  <div style="width:50px;height:3px;background:#0070F3;margin-bottom:18px;"></div>
+
+  <!-- 主内容区：2x2 网格布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <!-- 卡片1：Docker Compose 核心配置 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:docker" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">Docker Compose 一键部署</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#444444;line-height:1.5;margin:0 0 8px 0;">
+        通过 <span style="color:#0070F3;font-weight:600;">docker-compose up</span> 启动完整服务栈，支持后台运行、自动重置、网络隔离。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:10px;">
+        <tr><th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:left;color:#888888;">服务组件</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:left;color:#888888;">镜像/端口</th></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">Backend API</td>
+            <td style="padding:3px 0;color:#0070F3;">FastAPI / 8000</td></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">Frontend</td>
+            <td style="padding:3px 0;color:#0070F3;">Next.js14 / 3000</td></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">LLM Gateway</td>
+            <td style="padding:3px 0;color:#0070F3;">litellm / 4000</td></tr>
+      </table>
+    </div>
+
+    <!-- 卡片2：独立扩展策略 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:scale-balance" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">服务独立扩展能力</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#444444;line-height:1.5;margin:0 0 8px 0;">
+        各微服务可根据负载独立扩缩容，支持水平扩展与故障隔离。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:10px;">
+        <tr><th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:left;color:#888888;">扩展维度</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:right;color:#888888;">建议配置</th></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">Backend 副本数</td>
+            <td style="padding:3px 0;text-align:right;color:#0070F3;font-weight:600;">2-4 核</td></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">Frontend CDN</td>
+            <td style="padding:3px 0;text-align:right;color:#0070F3;font-weight:600;">静态加速</td></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">LLM Gateway</td>
+            <td style="padding:3px 0;text-align:right;color:#0070F3;font-weight:600;">按需扩展</td></tr>
+      </table>
+    </div>
+
+    <!-- 卡片3：Context Window 128K -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:memory" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">128K Tokens 上下文窗口</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#444444;line-height:1.5;margin:0 0 8px 0;">
+        默认支持 128K token 上下文，兼容主流大模型（GPT-4/Claude/Gemini），支持 <span style="color:#0070F3;font-weight:600;">compress_context</span> 压缩机制。
+      </p>
+      <div style="display:flex;gap:10px;margin-top:6px;">
+        <span style="background:#f0f7ff;color:#0070F3;padding:2px 8px;border-radius:3px;font-size:9px;font-family:Arial,sans-serif;">GPT-4 128K</span>
+        <span style="background:#f0f7ff;color:#0070F3;padding:2px 8px;border-radius:3px;font-size:9px;font-family:Arial,sans-serif;">Claude 200K</span>
+        <span style="background:#f0f7ff;color:#0070F3;padding:2px 8px;border-radius:3px;font-size:9px;font-family:Arial,sans-serif;">Gemini Pro</span>
+      </div>
+    </div>
+
+    <!-- 卡片4：资源配置建议 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:server" style="font-size:18px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">最低资源配置建议</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#444444;line-height:1.5;margin:0 0 8px 0;">
+        单节点部署最低配置要求，满足中小规模团队日常使用。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:10px;">
+        <tr><th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:left;color:#888888;">资源项</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:right;color:#888888;">推荐规格</th></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">CPU</td>
+            <td style="padding:3px 0;text-align:right;color:#0070F3;font-weight:600;">4 核+</td></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">内存</td>
+            <td style="padding:3px 0;text-align:right;color:#0070F3;font-weight:600;">16 GB+</td></tr>
+        <tr><td style="padding:3px 0;color:#0a0a0a;">磁盘</td>
+            <td style="padding:3px 0;text-align:right;color:#0070F3;font-weight:600;">50 GB SSD</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- 底部：关键命令与特性 -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid #E0E0E0;">
+    <div style="flex:1;">
+      <p style="font-family:Arial,sans-serif;font-size:10px;color:#888888;margin:0 0 4px 0;">快速启动命令</p>
+      <code style="font-family:'Courier New',monospace;font-size:11px;background:#f5f5f5;padding:6px 10px;border-radius:3px;color:#0a0a0a;">git clone → docker-compose up -d →访问 http://localhost:3000</code>
+    </div>
+    <div style="display:flex;gap:20px;">
+      <div style="text-align:center;">
+        <span style="font-family:Arial,sans-serif;font-size:20px;color:#0070F3;font-weight:700;">4</span>
+        <p style="font-family:Arial,sans-serif;font-size:9px;color:#888888;margin:0;">微服务组件</p>
+      </div>
+      <div style="text-align:center;">
+        <span style="font-family:Arial,sans-serif;font-size:20px;color:#0070F3;font-weight:700;">128K</span>
+        <p style="font-family:Arial,sans-serif;font-size:9px;color:#888888;margin:0;">Token 上下文</p>
+      </div>
+      <div style="text-align:center;">
+        <span style="font-family:Arial,sans-serif;font-size:20px;color:#0070F3;font-weight:700;">水平</span>
+        <p style="font-family:Arial,sans-serif;font-size:9px;color:#888888;margin:0;">弹性扩展</p>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p23" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:42px 52px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:28px;color:#0a0a0a;font-weight:700;margin:0 0 8px 0;">
+    PresentationAgent 实现多项技术创新，赋能专业文档生成
+  </h1>
+  <p style="font-family:Arial,Roboto,'Helvetica Neue',sans-serif;font-size:14px;color:#666666;margin:0 0 18px 0;">
+    核心架构突破 · 中间件链设计 · 增量编辑 · 多模态输出
+  </p>
+  <div style="width:56px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+  
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px;">
+    <div style="border:1px solid #e5e5e5;border-radius:4px;padding:16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:layers-outline" style="font-size:22px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">14层中间件链</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#555555;line-height:1.5;margin:0;">
+        MemoryCapture、IntentDetection、TokenBudget、LoopDetection、Checkpoint等14层中间件级联编排，实现精细化Agent控制
+      </p>
+    </div>
+    
+    <div style="border:1px solid #e5e5e5;border-radius:4px;padding:16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:robot" style="font-size:22px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">AgentFactory动态构建</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#555555;line-height:1.5;margin:0;">
+        运行时动态组装AgentContext+MiddlewareChain，支持灵活扩展与配置，按需注入能力模块
+      </p>
+    </div>
+    
+    <div style="border:1px solid #e5e5e5;border-radius:4px;padding:16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:pencil-outline" style="font-size:22px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">精准增量编辑</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#555555;line-height:1.5;margin:0;">
+        支持 edit_deck_page、regenerate_deck_page、retry_failed_deck_pages，精细化控制单页修改与重生成
+      </p>
+    </div>
+    
+    <div style="border:1px solid #e5e5e5;border-radius:4px;padding:16px;">
+      <div style="display:flex;align-items:center;margin-bottom:10px;">
+        <iconify-icon icon="mdi:file-document-multiple-outline" style="font-size:22px;color:#0070F3;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0a0a0a;margin:0;font-weight:600;">多模态输出</h3>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#555555;line-height:1.5;margin:0;">
+        原生PPTX、Draw.io XML、Markdown技术报告、React单页应用，四大输出模式满足多元场景需求
+      </p>
+    </div>
+  </div>
+  
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <div style="border:1px solid #e5e5e5;border-radius:4px;padding:16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">WebDeck 五角色编排系统</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <span style="font-family:Arial,Roboto,sans-serif;font-size:10px;background:#f5f5f5;padding:4px 8px;border-radius:3px;color:#0a0a0a;">Director 总控</span>
+        <span style="font-family:Arial,Roboto,sans-serif;font-size:10px;background:#f5f5f5;padding:4px 8px;border-radius:3px;color:#0a0a0a;">Planner 规划</span>
+        <span style="font-family:Arial,Roboto,sans-serif;font-size:10px;background:#f5f5f5;padding:4px 8px;border-radius:3px;color:#0a0a0a;">Scheduler 调度</span>
+        <span style="font-family:Arial,Roboto,sans-serif;font-size:10px;background:#f5f5f5;padding:4px 8px;border-radius:3px;color:#0a0a0a;">Orchestrator 编排</span>
+        <span style="font-family:Arial,Roboto,sans-serif;font-size:10px;background:#f5f5f5;padding:4px 8px;border-radius:3px;color:#0a0a0a;">Reviewer 质检</span>
+      </div>
+      <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#555555;line-height:1.5;margin:10px 0 0 0;">
+        流水线式任务分发与状态同步，实现复杂文档生成的全流程自动化
+      </p>
+    </div>
+    
+    <div style="border:1px solid #e5e5e5;border-radius:4px;padding:16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0070F3;margin:0 0 10px 0;font-weight:600;">核心技术优势</h3>
+      <div style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#555555;line-height:1.6;">
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#22c55e;margin-right:6px;"></iconify-icon>
+          <span>流式LLM调用 chat_stream，支持实时响应</span>
+        </div>
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#22c55e;margin-right:6px;"></iconify-icon>
+          <span>Context Window 默认128K，支持 compress_context 压缩</span>
+        </div>
+        <div style="display:flex;align-items:center;margin-bottom:6px;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#22c55e;margin-right:6px;"></iconify-icon>
+          <span>双Store架构：deckStore + chatStore 状态管理</span>
+        </div>
+        <div style="display:flex;align-items:center;">
+          <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#22c55e;margin-right:6px;"></iconify-icon>
+          <span>WebSocket实时通信，Base64传输PPTX二进制</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p24" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:48px 56px;box-sizing:border-box;overflow:hidden; background:#ffffff; color:#0a0a0a;"><style id="deck-theme-vars">:root{--accent:#0070F3;--bg:#ffffff;--text:#0a0a0a}section.deck-page{background:#ffffff!important;color:#0a0a0a!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 页面标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:26px;color:#0a0a0a;font-weight:700;margin:0 0 6px 0;">
+    附录：多模型支持与压缩机制
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:13px;color:#9E9E9E;margin:0 0 16px 0;">
+    技术实现细节补充说明 · 基于 AgentRuntime 架构
+  </p>
+  <div style="width:60px;height:3px;background:#0070F3;margin-bottom:24px;"></div>
+  
+  <!-- 核心信息说明 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0070F3;margin:0 0 10px 0;">
+        <iconify-icon icon="mdi:translate" style="font-size:18px;vertical-align:middle;margin-right:6px;"></iconify-icon>litellm 统一接口
+      </h3>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;">
+        通过 litellm 库实现对 140+ 大语言模型的统一调用封装，支持 OpenAI/Anthropic/Azure/OpenRouter 等多平台模型的透明切换。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+        <tr><th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:left;color:#9E9E9E;">特性</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:right;color:#9E9E9E;">说明</th></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">统一 API</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">single endpoint</td></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">模型池</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">140+ models</td></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">流式响应</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">chat_stream</td></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">Token 上限</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">128K context</td></tr>
+      </table>
+    </div>
+    
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:18px 20px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:15px;color:#0070F3;margin:0 0 10px 0;">
+        <iconify-icon icon="mdi:file-compression" style="font-size:18px;vertical-align:middle;margin-right:6px;"></iconify-icon>compress_context 压缩机制
+      </h3>
+      <p style="font-family:Arial,sans-serif;font-size:12px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;">
+        针对长对话场景的上下文管理优化机制，通过智能摘要和关键信息提取保持对话连贯性，避免超出模型 Token 限制。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+        <tr><th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:left;color:#9E9E9E;">阶段</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:right;color:#9E9E9E;">触发条件</th></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">Token 监测</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">&gt;80% limit</td></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">摘要生成</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">LLM summary</td></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">历史压缩</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">70% reduction</td></tr>
+        <tr><td style="padding:4px 0;color:#0a0a0a;">关键保留</td>
+            <td style="padding:4px 0;text-align:right;color:#0070F3;font-weight:600;">tool calls</td></tr>
+      </table>
+    </div>
+  </div>
+  
+  <!-- 技术实现细节 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h4 style="font-family:'Times New Roman',serif;font-size:13px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">模型动态切换</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+        AgentFactory 在初始化 AgentContext 时可指定 provider/model 参数，支持运行时动态切换底层模型，实现成本与效果的平衡。
+      </p>
+    </div>
+    
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h4 style="font-family:'Times New Roman',serif;font-size:13px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">TokenBudgetMiddleware</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+        14层中间件链中的 Token 预算管理组件，实时监控对话 Token 消耗，当接近阈值时触发压缩流程。
+      </p>
+    </div>
+    
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h4 style="font-family:'Times New Roman',serif;font-size:13px;color:#0a0a0a;margin:0 0 8px 0;font-weight:600;">上下文连贯性保障</h4>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+        压缩时保留关键信息：用户意图、已确认的工具调用结果、当前任务进度，确保压缩后仍可正确继续对话。
+      </p>
+    </div>
+  </div>
+  
+  <!-- 代码示例块 -->
+  <div style="margin-top:16px;padding:14px 18px;background:#f8f9fa;border-left:3px solid #0070F3;border-radius:0 4px 4px 0;">
+    <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;margin:0 0 8px 0;font-weight:600;">配置示例</p>
+    <code style="font-family:'Courier New',monospace;font-size:11px;color:#0a0a0a;display:block;white-space:pre-wrap;">litellm.add_key("openai", api_key)
+response = await litellm.completion(
+  model="gpt-4", messages=history,
+  context_window=128000,
+  compress_context=True  # 启用压缩
+)</code>
+  </div>
+</section></div></div>
+  </div>
+
+  <div id="deck-nav-overlay">
+    <button class="deck-nav-btn" id="prevBtn" onclick="prevPage()" aria-label="上一页" title="上一页 (←)">
+      <iconify-icon icon="mdi:chevron-left"></iconify-icon>
+    </button>
+    <span id="deck-page-indicator">1 / 22</span>
+    <button class="deck-nav-btn" id="nextBtn" onclick="nextPage()" aria-label="下一页" title="下一页 (→)">
+      <iconify-icon icon="mdi:chevron-right"></iconify-icon>
+    </button>
+  </div>
+
+  <script>
+    var totalPages = 22;
+    var currentPage = 0;
+    var slides = document.querySelectorAll('.deck-slide');
+
+    function scaleSlide(slide) {
+      var stage = slide.querySelector('.deck-stage');
+      if (!stage) return;
+      var vw = slide.offsetWidth || window.innerWidth;
+      var vh = slide.offsetHeight || window.innerHeight;
+      var scale = Math.min(vw / 1280, vh / 720);
+      var ox = (vw - 1280 * scale) / 2;
+      var oy = (vh - 720 * scale) / 2;
+      stage.style.transform = 'translate(' + ox + 'px, ' + oy + 'px) scale(' + scale + ')';
+    }
+
+    function scaleAllSlides() { slides.forEach(function(s) { scaleSlide(s); }); }
+
+    function goToPage(index) {
+      if (index < 0 || index >= totalPages) return;
+      slides[currentPage].classList.remove('active');
+      currentPage = index;
+      slides[currentPage].classList.add('active');
+      scaleSlide(slides[currentPage]);
+      updateUI();
+    }
+
+    function nextPage() { goToPage(currentPage + 1); }
+    function prevPage() { goToPage(currentPage - 1); }
+
+    function updateUI() {
+      document.getElementById('deck-progress-bar').style.width = ((currentPage + 1) / totalPages * 100) + '%';
+      document.getElementById('deck-page-indicator').textContent = (currentPage + 1) + ' / ' + totalPages;
+      document.getElementById('prevBtn').disabled = currentPage === 0;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages - 1;
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        e.preventDefault(); nextPage();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault(); prevPage();
+      }
+    });
+
+    window.addEventListener('load', function() { scaleAllSlides(); updateUI(); });
+    window.addEventListener('resize', scaleAllSlides);
+    // 两步初始化：立即尝试 + RAF 推迟确保布局完成后再缩放
+    scaleAllSlides();
+    requestAnimationFrame(function() { scaleAllSlides(); });
+    updateUI();
+
+    window.addEventListener('beforeprint', function() {
+      // Disable dynamic scaling in print mode
+      var stages = document.querySelectorAll('.deck-stage');
+      stages.forEach(function(stage) {
+        stage.style.transform = '';
+        stage.style.transformOrigin = '';
+        stage.style.width = '';
+        stage.style.height = '';
+      });
+      var printSlides = document.querySelectorAll('[data-page-id], section.slide');
+      printSlides.forEach(function(slide) {
+        slide.style.transform = '';
+        slide.style.transformOrigin = '';
+        slide.style.width = '100%';
+        slide.style.height = 'auto';
+      });
+    });
+    window.addEventListener('afterprint', function() {
+      // Restore scaling after print dialog closes
+      if (typeof scaleAllSlides === 'function') {
+        scaleAllSlides();
+      }
+    });
+  </script>
+</body>
+</html>

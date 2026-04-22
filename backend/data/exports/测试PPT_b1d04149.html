@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI发展趋势测试PPT</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.min.css" id="theme">
+    <style>
+        :root {
+            --r-background-color: #0f172a;
+            --r-main-color: #e2e8f0;
+            --r-heading-color: #38bdf8;
+            --r-link-color: #38bdf8;
+            --r-main-font: 'Inter', 'Noto Sans SC', sans-serif;
+            --r-heading-font: 'Inter', 'Noto Sans SC', sans-serif;
+            --r-code-font: 'Fira Code', 'JetBrains Mono', monospace;
+        }
+        .reveal { font-size: 28px; }
+        .reveal .slides section { padding: 40px 60px; }
+        
+            .reveal section { text-align: left; }
+            .reveal h1, .reveal h2 { color: #38bdf8; font-weight: 700; }
+            .reveal h3 { color: #818cf8; font-weight: 600; }
+            .reveal ul { list-style: none; padding-left: 0; }
+            .reveal ul li { padding: 8px 0; padding-left: 24px; position: relative; }
+            .reveal ul li::before { content: '▸'; position: absolute; left: 0; color: #38bdf8; }
+            .reveal code { background: #1e293b; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+            .reveal blockquote { border-left: 4px solid #38bdf8; padding-left: 16px; color: #94a3b8; }
+            .reveal .slide-number { color: #475569; }
+        
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+<section style="background:linear-gradient(135deg,#1a1a2e,#16213e);height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+<h1 style="color:#fff;font-size:2.5em;margin-bottom:20px;">🚀 AI发展趋势 2026</h1>
+<p style="color:#94a3b8;font-size:1.2em;">人工智能引领未来科技变革</p>
+</section>
+<section>
+<h2 style="color:#fff;">📋 目录</h2>
+<div style="display:flex;flex-direction:column;gap:15px;margin-top:30px;">
+<div style="background:rgba(255,255,255,0.1);padding:15px;border-radius:8px;">📊 市场概况</div>
+<div style="background:rgba(255,255,255,0.1);padding:15px;border-radius:8px;">⚡ 技术趋势</div>
+<div style="background:rgba(255,255,255,0.1);padding:15px;border-radius:8px;">🎯 应用场景</div>
+</div>
+</section>
+<section>
+<h2 style="color:#fff;">📊 市场概况</h2>
+<div style="display:flex;justify-content:space-around;margin-top:40px;">
+<div style="text-align:center;">
+<div style="font-size:3em;color:#60a5fa;font-weight:bold;">85%</div>
+<div style="color:#94a3b8;">年增长率</div>
+</div>
+<div style="text-align:center;">
+<div style="font-size:3em;color:#34d399;font-weight:bold;">$500B</div>
+<div style="color:#94a3b8;">市场规模</div>
+</div>
+<div style="text-align:center;">
+<div style="font-size:3em;color:#f472b6;font-weight:bold;">30%</div>
+<div style="color:#94a3b8;">企业渗透率</div>
+</div>
+</div>
+</section>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            slideNumber: true,
+            transition: 'slide',
+            backgroundTransition: 'fade',
+            width: 1280,
+            height: 720,
+            margin: 0.04,
+            center: false,
+        });
+
+        // 监听 postMessage 指令（与父窗口通信）
+        window.addEventListener('message', function(event) {
+            const data = event.data;
+            if (!data || !data.type) return;
+
+            switch(data.type) {
+                case 'goToSlide':
+                    Reveal.slide(data.index || 0);
+                    break;
+                case 'getState':
+                    window.parent.postMessage({
+                        type: 'slideState',
+                        current: Reveal.getIndices().h,
+                        total: Reveal.getTotalSlides(),
+                    }, '*');
+                    break;
+                case 'updateSlide':
+                    // 动态更新指定幻灯片内容
+                    const slides = document.querySelectorAll('.reveal .slides > section');
+                    if (data.index < slides.length) {
+                        slides[data.index].innerHTML = data.html;
+                    }
+                    break;
+            }
+        });
+
+        // 翻页时通知父窗口
+        Reveal.on('slidechanged', function(event) {
+            window.parent.postMessage({
+                type: 'slideChanged',
+                current: event.indexh,
+                total: Reveal.getTotalSlides(),
+            }, '*');
+        });
+
+        // 初始化完成后通知
+        Reveal.on('ready', function() {
+            window.parent.postMessage({
+                type: 'revealReady',
+                total: Reveal.getTotalSlides(),
+            }, '*');
+        });
+    </script>
+</body>
+</html>
