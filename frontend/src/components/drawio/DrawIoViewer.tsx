@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChatStore } from "@/stores/chatStore";
+import { useDiagramStore } from "@/stores/diagramStore";
+import { prepareDiagramXmlForViewer, BLANK_XML } from "@/lib/diagramXml";
 import { getDrawIoEmbedUrl } from "@/lib/drawio";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
-const BLANK_XML = `<mxfile><diagram id="blank" name="Page-1"><mxGraphModel dx="1000" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>`;
 const DRAWIO_INIT_TIMEOUT_MS = 12000;
 
 interface DrawIoMessagePayload {
@@ -38,9 +40,13 @@ export function DrawIoViewer({ embedded = false }: { embedded?: boolean }) {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const { sendDiagramAutosave } = useWebSocket();
   const artifactContent = useChatStore((s) => s.artifactContent);
+  const taskId = useChatStore((s) => s.taskId);
   const setArtifactContent = useChatStore((s) => s.setArtifactContent);
   const setCurrentArtifactType = useChatStore((s) => s.setCurrentArtifactType);
+  const diagramXml = useDiagramStore((s) => s.xml);
+  const updateDiagramXml = useDiagramStore((s) => s.updateXml);
   const lastLoadedXml = useRef<string>("");
 
   useEffect(() => {
@@ -73,7 +79,11 @@ export function DrawIoViewer({ embedded = false }: { embedded?: boolean }) {
         setIframeReady(true);
         setLoadError(null);
 
-        const initialXml = artifactContent || BLANK_XML;
+        const prepared = prepareDiagramXmlForViewer(diagramXml || artifactContent || BLANK_XML);
+        if (prepared.error) {
+          setLoadError(prepared.error);
+        }
+        const initialXml = prepared.xml || BLANK_XML;
         lastLoadedXml.current = initialXml;
         iframeRef.current?.contentWindow?.postMessage(
           JSON.stringify({
@@ -83,13 +93,24 @@ export function DrawIoViewer({ embedded = false }: { embedded?: boolean }) {
           }),
           "*"
         );
+
+        // 延迟发送 resize action，让 Draw.io 适应容器大小
+        setTimeout(() => {
+          iframeRef.current?.contentWindow?.postMessage(
+            JSON.stringify({ action: "resize" }),
+            "*"
+          );
+        }, 300);
       } else if (msg.event === "autosave" || msg.event === "save") {
         if (typeof msg.xml !== "string") {
           return;
         }
 
-        lastLoadedXml.current = msg.xml;
-        setArtifactContent(msg.xml);
+        const prepared = prepareDiagramXmlForViewer(msg.xml);
+        lastLoadedXml.current = prepared.xml;
+        updateDiagramXml(prepared.xml, { syncStatus: "dirty" });
+        setArtifactContent(prepared.xml);
+        sendDiagramAutosave(prepared.xml, taskId || undefined);
 
         if (msg.event === "save") {
           iframeRef.current?.contentWindow?.postMessage(
@@ -112,7 +133,7 @@ export function DrawIoViewer({ embedded = false }: { embedded?: boolean }) {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [artifactContent, setArtifactContent, setCurrentArtifactType]);
+  }, [artifactContent, diagramXml, sendDiagramAutosave, setArtifactContent, setCurrentArtifactType, taskId, updateDiagramXml]);
 
   useEffect(() => {
     if (iframeReady) {
@@ -140,23 +161,25 @@ export function DrawIoViewer({ embedded = false }: { embedded?: boolean }) {
 
   // 当外部 artifactContent 更新且不等于 iframe 中目前的内容时加载
   useEffect(() => {
-    if (iframeReady && artifactContent && artifactContent !== lastLoadedXml.current) {
-      lastLoadedXml.current = artifactContent;
+    const nextXml = diagramXml || artifactContent;
+    if (iframeReady && nextXml && nextXml !== lastLoadedXml.current) {
+      const prepared = prepareDiagramXmlForViewer(nextXml);
+      lastLoadedXml.current = prepared.xml;
       iframeRef.current?.contentWindow?.postMessage(
         JSON.stringify({
           action: "load",
           autosave: 1,
-          xml: artifactContent,
+          xml: prepared.xml,
         }),
         "*"
       );
     }
-  }, [artifactContent, iframeReady]);
+  }, [artifactContent, diagramXml, iframeReady]);
 
   return (
     <div
       className={embedded
-        ? "flex-1 min-h-0 w-full relative overflow-hidden bg-white"
+        ? "absolute inset-0 overflow-hidden bg-white"
         : "flex-1 min-h-0 w-full h-full relative border border-gray-200 shadow-sm rounded-2xl overflow-hidden bg-white"}
     >
       {!iframeReady && (
