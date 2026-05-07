@@ -49,6 +49,10 @@ Thumbs.db
 htmlcov/
 backend/test_*.py
 
+# Utility
+tmp/
+scripts/
+
 # Frontend
 frontend/src/components/webdeck/editor/
 *.tsbuildinfo
