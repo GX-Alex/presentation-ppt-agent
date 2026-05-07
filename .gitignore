@@ -35,6 +35,9 @@ backend/data/tmp/
 # OMC
 .omc/
 
+# Claude
+.claude/
+
 # Outputs & Docs
 outputs/
 docs/plans/
