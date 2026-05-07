@@ -48,6 +48,7 @@ Thumbs.db
 .coverage
 htmlcov/
 backend/test_*.py
+backend/quick_test_*.py
 
 # Utility
 tmp/
