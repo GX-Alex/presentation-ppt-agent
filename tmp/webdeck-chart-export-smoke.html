@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebDeck Chart Export Smoke</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #slides-container { position: fixed; inset: 0; }
+    .deck-slide { position: absolute; inset: 0; display: none; overflow: hidden; }
+    .deck-slide.active { display: block; }
+    .deck-stage { width: 1280px; height: 720px; position: absolute; top: 0; left: 0; transform-origin: 0 0; overflow: hidden; }
+    .deck-page { width: 100%; height: 100%; padding: 32px; display: flex; flex-direction: column; gap: 20px; background: radial-gradient(circle at top right, rgba(59,130,246,0.18), transparent 35%), linear-gradient(180deg, #0f172a, #111827); }
+    .card { border: 1px solid rgba(148,163,184,0.18); border-radius: 24px; background: rgba(15,23,42,0.72); padding: 24px; }
+    .deck-chart-wrapper { display: flex; flex-direction: column; gap: 12px; min-height: 360px; }
+    .toolbar { position: fixed; right: 24px; bottom: 24px; z-index: 10; display: flex; gap: 10px; }
+    .toolbar button { border: 1px solid rgba(148,163,184,0.2); background: rgba(15,23,42,0.8); color: #fff; border-radius: 999px; padding: 10px 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="slides-container">
+    <div class="deck-slide active">
+      <div class="deck-stage">
+        <section class="deck-page">
+          <div>
+            <h1 style="font-size: 36px; font-weight: 800;">第一页</h1>
+            <p style="margin-top: 8px; color: #94a3b8;">这个页面不含图表，用来验证隐藏页不会提前初始化。</p>
+          </div>
+          <div class="card" style="flex: 1; display: flex; align-items: center; justify-content: center; color: #cbd5e1;">
+            切到下一页看图表是否正常出现
+          </div>
+        </section>
+      </div>
+    </div>
+    <div class="deck-slide">
+      <div class="deck-stage">
+        <section class="deck-page">
+          <div>
+            <h1 style="font-size: 36px; font-weight: 800;">第二页图表</h1>
+            <p style="margin-top: 8px; color: #94a3b8;">这里模拟导出后的 deferred chart init。</p>
+          </div>
+          <div class="card deck-chart-wrapper">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              <div>
+                <div style="font-size:16px;font-weight:700;color:#e2e8f0;">成本节省分解图</div>
+                <div style="margin-top:4px;font-size:12px;color:#94a3b8;">用于验证导出 HTML 后的图表渲染与 resize。</div>
+              </div>
+              <div style="padding:6px 10px;border-radius:999px;background:rgba(59,130,246,0.16);font-size:12px;color:#93c5fd;white-space:nowrap;">单位：万元</div>
+            </div>
+            <div id="demo-chart" style="width:100%;height:260px;"></div>
+            <script type="application/webdeck-chart-init">
+              const chart = echarts.init(document.getElementById('demo-chart'));
+              chart.setOption({
+                backgroundColor: 'transparent',
+                grid: { left: 56, right: 24, top: 48, bottom: 36 },
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                legend: { top: 0, textStyle: { color: '#e2e8f0' }, data: ['传统方案', 'AI方案'] },
+                xAxis: {
+                  type: 'category',
+                  data: ['人力', '系统', '运营'],
+                  axisLabel: { color: '#94a3b8' },
+                  axisLine: { lineStyle: { color: '#475569' } }
+                },
+                yAxis: {
+                  type: 'value',
+                  axisLabel: { color: '#94a3b8' },
+                  splitLine: { lineStyle: { color: 'rgba(148,163,184,0.12)' } }
+                },
+                series: [
+                  {
+                    name: '传统方案',
+                    type: 'bar',
+                    barMaxWidth: 28,
+                    itemStyle: { color: '#64748b', borderRadius: [8, 8, 0, 0] },
+                    data: [120, 90, 72]
+                  },
+                  {
+                    name: 'AI方案',
+                    type: 'bar',
+                    barMaxWidth: 28,
+                    itemStyle: { color: '#38bdf8', borderRadius: [8, 8, 0, 0] },
+                    data: [80, 50, 36]
+                  }
+                ]
+              });
+              window.addEventListener('resize', () => chart.resize());
+            </script>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button onclick="prevPage()">上一页</button>
+    <button onclick="nextPage()">下一页</button>
+  </div>
+
+  <script>
+    var totalPages = 2;
+    var currentPage = 0;
+    var slides = document.querySelectorAll('.deck-slide');
+
+    function scaleSlide(slide) {
+      var stage = slide.querySelector('.deck-stage');
+      if (!stage) return;
+      var vw = slide.offsetWidth || window.innerWidth;
+      var vh = slide.offsetHeight || window.innerHeight;
+      var scale = Math.min(vw / 1280, vh / 720);
+      var ox = (vw - 1280 * scale) / 2;
+      var oy = (vh - 720 * scale) / 2;
+      stage.style.transform = 'translate(' + ox + 'px, ' + oy + 'px) scale(' + scale + ')';
+    }
+
+    function runChartInitScripts(slide) {
+      if (!slide || typeof window.echarts === 'undefined') return;
+      slide.querySelectorAll('script[type="application/webdeck-chart-init"]:not([data-webdeck-executed="true"])').forEach(function(script) {
+        try {
+          var run = new Function(script.textContent || '');
+          run();
+          script.setAttribute('data-webdeck-executed', 'true');
+        } catch (error) {
+          console.warn('[Smoke] chart init failed', error);
+        }
+      });
+    }
+
+    function refreshActiveCharts() {
+      var activeSlide = slides[currentPage];
+      if (!activeSlide || !window.echarts || typeof window.echarts.getInstanceByDom !== 'function') return;
+      var nodes = activeSlide.querySelectorAll('[_echarts_instance_], .deck-chart-wrapper [id]');
+      var visited = new Set();
+      nodes.forEach(function(node) {
+        if (visited.has(node)) return;
+        visited.add(node);
+        try {
+          var instance = window.echarts.getInstanceByDom(node);
+          if (instance) instance.resize({ animation: false });
+        } catch (error) {
+          console.warn('[Smoke] chart refresh failed', error);
+        }
+      });
+    }
+
+    function syncActiveSlide() {
+      if (!slides[currentPage]) return;
+      scaleSlide(slides[currentPage]);
+      runChartInitScripts(slides[currentPage]);
+      refreshActiveCharts();
+      requestAnimationFrame(refreshActiveCharts);
+      window.setTimeout(refreshActiveCharts, 120);
+    }
+
+    function goToPage(index) {
+      if (index < 0 || index >= totalPages) return;
+      slides[currentPage].classList.remove('active');
+      currentPage = index;
+      slides[currentPage].classList.add('active');
+      syncActiveSlide();
+    }
+
+    function nextPage() { goToPage(currentPage + 1); }
+    function prevPage() { goToPage(currentPage - 1); }
+
+    window.addEventListener('load', function() { syncActiveSlide(); });
+    window.addEventListener('resize', syncActiveSlide);
+    syncActiveSlide();
+    requestAnimationFrame(function() { syncActiveSlide(); });
+  </script>
+</body>
+</html>

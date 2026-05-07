@@ -1,0 +1,2200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2024-2025年人工智能发展现状与趋势分析</title>
+  <!-- P1: Iconify 图标库 CDN -->
+  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #FFFFFF;
+      color: #000000;
+      font-family: Arial, Roboto, 'Helvetica Neue', sans-serif;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Times New Roman', 'Garamond', Georgia, serif;
+    }
+
+    @page { size: 1280px 720px; margin: 0; }
+
+    /* ── P0: 全屏幻灯片容器 ── */
+    #slides-container {
+      position: fixed;
+      inset: 0;
+    }
+
+    .deck-slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      overflow: hidden;
+    }
+
+    .deck-slide.active { display: block; }
+
+    /* P2: 内容画布 — 固定 1280×720，通过 JS scale+translate 适配视口 */
+    .deck-stage {
+      width: 1280px;
+      height: 720px;
+      position: absolute;
+      top: 0; left: 0;
+      transform-origin: 0 0;
+      overflow: hidden;
+    }
+
+    .deck-stage > *,
+    .deck-stage > section,
+    .deck-stage > [data-page-id] {
+      width: 100% !important;
+      height: 100% !important;
+      max-height: 100% !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      box-sizing: border-box !important;
+    }
+
+    /* ── 顶部进度条 ── */
+    #deck-progress {
+      position: fixed; top: 0; left: 0; right: 0;
+      height: 3px;
+      background: rgba(var(--s-surface-rgb), 0.08);
+      z-index: 1000;
+    }
+    #deck-progress-bar {
+      height: 100%;
+      background: #0A2463;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    /* ── P0: 右下角幽灵导航覆层 ── */
+    #deck-nav-overlay {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 1000;
+      opacity: 0.25;
+      transition: opacity 0.2s;
+    }
+    #deck-nav-overlay:hover { opacity: 1; }
+
+    .deck-nav-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.55);
+      color: rgba(255,255,255,0.85);
+      cursor: pointer;
+      transition: all 0.15s;
+      backdrop-filter: blur(8px);
+      font-size: 18px;
+    }
+    .deck-nav-btn:hover { background: rgba(255,255,255,0.15); color: white; }
+    .deck-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    #deck-page-indicator {
+      font-size: 11px;
+      color: rgba(255,255,255,0.65);
+      min-width: 40px;
+      text-align: center;
+      font-family: Arial, Roboto, 'Helvetica Neue', sans-serif;
+    }
+
+    /* ── P1: CSS 变量 ── */
+    :root {
+      --accent: #0A2463;
+      --bg: #FFFFFF;
+      --text: #000000;
+      --s-surface-rgb: 0, 0, 0;
+      --s-card-bg: rgba(var(--s-surface-rgb), 0.04);
+      --s-card-border: rgba(var(--s-surface-rgb), 0.12);
+      --s-radius: 12px;
+    }
+
+    /* ── P1: shadcn/ui 风格全局组件类 (.s- 前缀) ── */
+    .s-card {
+      background: var(--s-card-bg);
+      border: 1px solid var(--s-card-border);
+      border-radius: var(--s-radius);
+      padding: 1rem 1.25rem;
+    }
+    .s-card-hover { transition: all 0.2s; }
+    .s-card-hover:hover { background: rgba(var(--s-surface-rgb), 0.08); transform: translateY(-2px); }
+    .s-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+    .s-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .s-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    .s-flex { display: flex; align-items: center; gap: 0.75rem; }
+    .s-flex-col { display: flex; flex-direction: column; gap: 0.75rem; }
+    .s-alert {
+      border-left: 4px solid var(--accent);
+      background: rgba(var(--s-surface-rgb), 0.05);
+      border-radius: 0 var(--s-radius) var(--s-radius) 0;
+      padding: 0.75rem 1rem;
+    }
+    .s-alert-warn { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+    .s-alert-error { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+    .s-alert-success { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+    .s-badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 10px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 600;
+      background: rgba(var(--s-surface-rgb), 0.08);
+      color: var(--accent);
+      border: 1px solid rgba(var(--s-surface-rgb), 0.2);
+    }
+    .s-code {
+      font-family: "JetBrains Mono","Fira Code",monospace;
+      background: rgba(var(--s-surface-rgb), 0.06);
+      border: 1px solid rgba(var(--s-surface-rgb), 0.12);
+      border-radius: 6px;
+      padding: 0.2em 0.5em;
+      font-size: 0.85em;
+    }
+    .s-stat { text-align: center; }
+    .s-stat-value { font-size: 2.5rem; font-weight: 800; color: var(--accent); line-height: 1; }
+    .s-stat-label { font-size: 0.8rem; color: rgba(var(--s-surface-rgb), 0.55); margin-top: 0.25rem; }
+    .s-table { width: 100%; border-collapse: collapse; }
+    .s-table th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(var(--s-surface-rgb), 0.55); border-bottom: 1px solid rgba(var(--s-surface-rgb), 0.15); padding: 0.5rem 0.75rem; text-align: left; }
+    .s-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(var(--s-surface-rgb), 0.08); font-size: 0.875rem; }
+    .s-table tr:last-child td { border-bottom: none; }
+    .s-divider { height: 1px; background: rgba(var(--s-surface-rgb), 0.12); margin: 0.75rem 0; }
+    iconify-icon { display: inline-block; vertical-align: middle; }
+
+    /* ── 打印：每页独立输出 ── */
+    @media print {
+      #deck-nav-overlay, #deck-progress { display: none !important; }
+      html, body { overflow: visible !important; background: #FFFFFF !important; }
+      #slides-container { position: static !important; }
+      .deck-slide {
+        display: block !important;
+        position: static !important;
+        page-break-after: always;
+        break-after: page;
+        width: 100vw !important;
+        height: 56.25vw !important;
+      }
+      .deck-slide:last-child { page-break-after: auto; break-after: auto; }
+      .deck-stage {
+        transform: none !important;
+        width: 100% !important;
+        height: 100% !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部进度条 -->
+  <div id="deck-progress"><div id="deck-progress-bar"></div></div>
+
+  <!-- P0: 幻灯片容器 -->
+  <div id="slides-container">
+<div class="deck-slide active"><div class="deck-stage"><section data-page-id="p01" class="deck-page" style="width: 100%; height: 100%; padding: 28px; box-sizing: border-box; overflow: hidden; font-family: Arial, Roboto, sans-serif; background: rgb(255, 255, 255); color: rgb(0, 0, 0); gap: 28px; max-width: 100%; margin-left: auto; margin-right: auto; justify-content: start; align-items: end;" data-layout-scope="scope-page-root" data-layout-padding="28" data-layout-width-ratio="100" data-layout-density="spacious" data-layout-module-order="scope-page-root-module-2,scope-page-root-module-1,scope-page-root-module-3,scope-page-root-module-4,scope-page-root-module-5" data-layout-module-visibility="scope-page-root-module-2:visible,scope-page-root-module-1:visible,scope-page-root-module-3:visible,scope-page-root-module-4:visible,scope-page-root-module-5:visible" data-layout-gap="28" data-layout-justify="start" data-layout-align="end"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+
+  <!-- 顶部导航条 -->
+  <div style="margin-bottom:24px;" data-layout-module-id="scope-page-root-module-2">
+    <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:38px;color:#000000;font-weight:700;margin:0 0 8px 0;line-height:1.2;" data-node-id="heading-1" data-node-kind="heading" data-editable="true">
+      2024-2025年人工智能<br>发展现状与趋势分析
+    </h1>
+    <div style="width:48px;height:3px;background:#0A2463;margin-top:16px;"></div>
+  </div><div style="justify-content: space-between; align-items: center; margin-bottom: 32px;" data-layout-module-id="scope-page-root-module-1">
+    <div style="font-size:11px;color:#9E9E9E;letter-spacing:0.5px;">CONFIDENTIAL · 战略分析报告</div>
+    <div style="font-size:11px;color:#9E9E9E;">PAGE <span style="color:#0A2463;font-weight:600;">01</span> / 12</div>
+  </div>
+
+  <!-- 主标题区域 -->
+  
+
+  <!-- 副标题 -->
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:15px;color:#4A4A4A;margin:0 0 40px 0;line-height:1.6;max-width:680px;" data-node-id="paragraph-1" data-node-kind="paragraph" data-editable="true" data-layout-module-id="scope-page-root-module-3">
+    从大模型到Agent智能体的范式转换 · 多模态融合与长上下文能力成为标配 · 应用场景
+  </p>
+
+  <!-- 核心信息卡片区 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin-bottom:32px;" data-layout-module-id="scope-page-root-module-4">
+
+    <!-- 卡片1: 技术演进 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px 16px;">
+      <iconify-icon icon="mdi:cpu-64-bit" style="font-size:28px;color:#0A2463;display:block;margin-bottom:12px;"></iconify-icon>
+      <h3 style="font-family: &quot;Times New Roman&quot;, serif; font-size: 16px; color: rgb(22, 75, 59); margin: 0px 0px 6px; font-weight: 700; text-align: left;" data-node-id="heading-2" data-node-kind="heading" data-editable="true">技术演进</h3>
+      <p style="font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;" data-node-id="paragraph-2" data-node-kind="paragraph" data-editable="true">大模型能力持续突破，上下文窗口扩展至 100K-200K tokens</p>
+    </div>
+
+    <!-- 卡片2: Agent应用 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px 16px;">
+      <iconify-icon icon="mdi:robot" style="font-size:28px;color:#0A2463;display:block;margin-bottom:12px;"></iconify-icon>
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 6px 0;font-weight:600;" data-node-id="heading-3" data-node-kind="heading" data-editable="true">Agent智能体</h3>
+      <p style="font-size: 23px; color: rgb(74, 74, 74); line-height: 1.5; margin: 0px;" data-node-id="paragraph-3" data-node-kind="paragraph" data-editable="true">具备规划、推理与工具使用能力的新一代AI系统范式</p>
+    </div>
+
+    <!-- 卡片3: 行业落地 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px 16px;">
+      <iconify-icon icon="mdi:domain" style="font-size:28px;color:#0A2463;display:block;margin-bottom:12px;"></iconify-icon>
+      <h3 style="font-family: &quot;Times New Roman&quot;, serif; font-size: 36px; color: rgb(10, 36, 99); margin: 0px 0px 6px; font-weight: 600;" data-node-id="heading-4" data-node-kind="heading" data-editable="true">行业落地</h3>
+      <p style="font-size: 27px; color: rgb(74, 74, 74); line-height: 1.5; margin: 0px;" data-node-id="paragraph-4" data-node-kind="paragraph" data-editable="true">智能客服、代码开发、医疗健康、自动驾驶全面渗透</p>
+    </div>
+
+    <!-- 卡片4: 市场格局 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px 16px;">
+      <iconify-icon icon="mdi:chart-line" style="font-size:28px;color:#0A2463;display:block;margin-bottom:12px;"></iconify-icon>
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 6px 0;font-weight:600;" data-node-id="heading-5" data-node-kind="heading" data-editable="true">市场格局</h3>
+      <p style="font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;" data-node-id="paragraph-5" data-node-kind="paragraph" data-editable="true">全球AI市场年复合增长率预计超 [Data: 20%+]，资本持续涌入</p>
+    </div>
+  </div>
+
+  <!-- 底部信息栏 -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:20px;border-top:1px solid #E0E0E0;" data-layout-module-id="scope-page-root-module-5">
+    <div style="display:flex;gap:32px;">
+      <div>
+        <div style="font-size:10px;color:#9E9E9E;margin-bottom:4px;">报告日期</div>
+        <div style="font-size:13px;color:#000000;font-weight:600;">2024年12月</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:#9E9E9E;margin-bottom:4px;">报告类型</div>
+        <div style="font-size:13px;color:#000000;font-weight:600;">年度趋势分析</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:#9E9E9E;margin-bottom:4px;">覆盖周期</div>
+        <div style="font-size:13px;color:#000000;font-weight:600;">2024Q1 - 2025Q4</div>
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:10px;color:#9E9E9E;margin-bottom:4px;">数据来源</div>
+      <div style="font-size:11px;color:#4A4A4A;">行业公开数据 · 研究机构报告 · 对话分析</div>
+    </div>
+  </div>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p02" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- 顶部标题区 -->
+  <div style="display:flex;align-items:center;margin-bottom:8px;">
+    <div style="width:5px;height:28px;background:#0A2463;margin-right:16px;"></div>
+    <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:28px;color:#000000;font-weight:700;margin:0;">目录导航</h1>
+  </div>
+  <p style="font-size:13px;color:#9E9E9E;margin:0 0 20px 21px;">本演示文稿涵盖AI技术现状、大模型动态、关键突破、行业应用、市场格局、安全伦理及趋势展望</p>
+  <div style="width:100%;height:1px;background:#E0E0E0;margin-bottom:20px;"></div>
+
+  <!-- 主内容区：左侧视觉块 + 右侧目录列表 -->
+  <div style="display:grid;grid-template-columns:320px 1fr;gap:28px;height:calc(100% - 110px);">
+
+    <!-- 左侧：AI发展脉络时间线（视觉块） -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:20px;background:#FAFAFA;">
+      <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:15px;color:#0A2463;margin:0 0 16px 0;font-weight:600;">AI发展脉络</h3>
+      
+      <!-- 时间线节点 -->
+      <div style="position:relative;padding-left:20px;border-left:2px solid #0A2463;margin-left:8px;">
+        <div style="position:absolute;left:-7px;top:0;width:12px;height:12px;background:#0A2463;border-radius:50%;"></div>
+        <p style="font-size:11px;color:#9E9E9E;margin:0 0 2px 0;">2022-2023</p>
+        <p style="font-size:13px;color:#000000;font-weight:600;margin:0 0 14px 0;">大模型涌现期</p>
+        
+        <div style="position:absolute;left:-7px;top:50px;width:12px;height:12px;background:#0A2463;border-radius:50%;"></div>
+        <p style="font-size:11px;color:#9E9E9E;margin:0 0 2px 0;">2024</p>
+        <p style="font-size:13px;color:#000000;font-weight:600;margin:0 0 14px 0;">Agent智能体崛起</p>
+        
+        <div style="position:absolute;left:-7px;top:100px;width:12px;height:12px;background:#0A2463;border-radius:50%;"></div>
+        <p style="font-size:11px;color:#9E9E9E;margin:0 0 2px 0;">2024-2025</p>
+        <p style="font-size:13px;color:#000000;font-weight:600;margin:0 0 14px 0;">多模态融合深化</p>
+        
+        <div style="position:absolute;left:-7px;top:150px;width:12px;height:12px;background:#0A2463;border-radius:50%;"></div>
+        <p style="font-size:11px;color:#9E9E9E;margin:0 0 2px 0;">2025+</p>
+        <p style="font-size:13px;color:#000000;font-weight:600;margin:0;">AGI探索与安全治理</p>
+      </div>
+
+      <!-- 底部关键数据 -->
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid #E0E0E0;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="text-align:center;">
+          <p style="font-size:24px;color:#0A2463;font-weight:700;margin:0;">[Data: XX%]</p>
+          <p style="font-size:10px;color:#9E9E9E;margin:4px 0 0 0;">年复合增长率</p>
+        </div>
+        <div style="text-align:center;">
+          <p style="font-size:24px;color:#0A2463;font-weight:700;margin:0;">[Data: XX]</p>
+          <p style="font-size:10px;color:#9E9E9E;margin:4px 0 0 0;">主要参与者</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：目录列表区 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+
+      <!-- 目录卡片1 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">01</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">AI技术现状概览</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">全球AI技术生态全景 · 技术成熟度评估 · 产业渗透率分析</p>
+      </div>
+
+      <!-- 目录卡片2 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">02</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">大模型发展动态</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">主流模型对比分析 · 长上下文技术 · 多模态融合趋势</p>
+      </div>
+
+      <!-- 目录卡片3 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">03</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">关键技术突破</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">Agent智能体架构 · 工具调用能力 · 推理效率优化</p>
+      </div>
+
+      <!-- 目录卡片4 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">04</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">行业应用：智能客服与代码</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">企业级落地案例 · 效率提升数据 · ROI分析框架</p>
+      </div>
+
+      <!-- 目录卡片5 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">05</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">行业应用：医疗与自动驾驶</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">垂直领域深度应用 · 监管合规要求 · 商业化路径</p>
+      </div>
+
+      <!-- 目录卡片6 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">06</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">全球市场格局</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">区域竞争态势 · 主要厂商份额 · 资本流向分析</p>
+      </div>
+
+      <!-- 目录卡片7 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">07</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">未来趋势展望</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">技术演进路线 · 新兴应用场景 · 产业变革预判</p>
+      </div>
+
+      <!-- 目录卡片8 -->
+      <div class="s-card" style="padding:14px 16px;">
+        <div style="display:flex;align-items:center;margin-bottom:8px;">
+          <span style="display:inline-block;width:22px;height:22px;background:#0A2463;color:#FFFFFF;font-size:12px;font-weight:700;text-align:center;line-height:22px;margin-right:10px;">08</span>
+          <h4 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">总结与行动建议</h4>
+        </div>
+        <p style="font-size:11px;color:#4A4A4A;margin:0;line-height:1.5;">战略优先级矩阵 · 关键成功因素 · 实施路线图</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 底部页码标识 -->
+  <div style="position:absolute;bottom:20px;right:48px;font-size:11px;color:#9E9E9E;">02 / 12</div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p03" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+
+  <!-- So What 行动标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:22px;color:#000000;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    AI技术正经历从大模型到Agent智能体的范式转换，2024-2025年多项关键技术进入规模化应用阶段
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#9E9E9E;margin:0 0 10px 0;">
+    基于全球AI产业研究数据综合分析 · 数据截至2024Q4
+  </p>
+  <div style="width:50px;height:2px;background:#0A2463;margin-bottom:14px;"></div>
+
+  <!-- 主内容区：三栏Grid布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;height:calc(100% - 90px);">
+
+    <!-- 第一栏：summary_block + 概念解释 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <!-- 技术现状摘要卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;flex:1;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:14px;color:#0A2463;margin:0 0 8px 0;font-weight:600;">AI技术发展现状总览</h3>
+        <p style="font-family:Arial,Roboto,sans-serif;font-size:10.5px;color:#4A4A4A;line-height:1.5;margin:0 0 8px 0;">
+          当前AI技术正处于从「预测下一个词」向「预测世界状态」的关键转型期，大模型能力边界持续扩展，Agent智能体成为新发展方向。
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+          <span style="background:#0A2463;color:#FFFFFF;font-size:9px;padding:2px 6px;border-radius:2px;">大模型</span>
+          <span style="background:#0A2463;color:#FFFFFF;font-size:9px;padding:2px 6px;border-radius:2px;">Agent</span>
+          <span style="background:#0A2463;color:#FFFFFF;font-size:9px;padding:2px 6px;border-radius:2px;">多模态</span>
+          <span style="background:#0A2463;color:#FFFFFF;font-size:9px;padding:2px 6px;border-radius:2px;">具身智能</span>
+        </div>
+      </div>
+
+      <!-- 技术演进路径 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0A2463;margin:0 0 6px 0;">技术演进路径</h3>
+        <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:#4A4A4A;">
+          <span style="background:#E0E0E0;padding:3px 8px;border-radius:2px;">感知智能</span>
+          <span style="color:#9E9E9E;">→</span>
+          <span style="background:#E0E0E0;padding:3px 8px;border-radius:2px;">认知智能</span>
+          <span style="color:#9E9E9E;">→</span>
+          <span style="background:#0A2463;color:#FFFFFF;padding:3px 8px;border-radius:2px;">决策智能</span>
+          <span style="color:#9E9E9E;">→</span>
+          <span style="background:#E0E0E0;padding:3px 8px;border-radius:2px;">具身智能</span>
+        </div>
+      </div>
+
+      <!-- 核心概念解释 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;flex:1;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0A2463;margin:0 0 6px 0;">关键概念解析</h3>
+        <div style="font-size:10px;color:#4A4A4A;line-height:1.5;">
+          <p style="margin:0 0 5px 0;"><strong style="color:#000000;">大模型(Large Model)：</strong>参数规模达百亿至万亿级的深度学习模型，具备涌现能力</p>
+          <p style="margin:0 0 5px 0;"><strong style="color:#000000;">Agent智能体：</strong>具备自主规划、工具使用、多步推理的AI系统，可完成复杂任务</p>
+          <p style="margin:0;"><strong style="color:#000000;">多模态融合：</strong>整合文本、图像、音频、视频等多种数据类型的处理能力</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二栏：key_metrics_block 关键指标 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <!-- 市场规模卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;flex:1;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0A2463;margin:0 0 8px 0;">市场规模与增长</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="text-align:center;padding:8px 4px;background:#F5F5F5;border-radius:3px;">
+            <div style="font-family:'Times New Roman',serif;font-size:22px;color:#0A2463;font-weight:700;">[Data: XX%]</div>
+            <div style="font-size:9px;color:#9E9E9E;margin-top:2px;">年复合增长率</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;background:#F5F5F5;border-radius:3px;">
+            <div style="font-family:'Times New Roman',serif;font-size:22px;color:#0A2463;font-weight:700;">$[Data: X]T</div>
+            <div style="font-size:9px;color:#9E9E9E;margin-top:2px;">2030年市场规模</div>
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:9.5px;">
+          <tr>
+            <th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:left;color:#9E9E9E;">细分领域</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:right;color:#9E9E9E;">市场份额</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:3px 0;text-align:right;color:#9E9E9E;">增速</th>
+          </tr>
+          <tr>
+            <td style="padding:3px 0;color:#4A4A4A;">基础模型</td>
+            <td style="padding:3px 0;text-align:right;color:#0A2463;font-weight:600;">[Data: XX%]</td>
+            <td style="padding:3px 0;text-align:right;color:#0A2463;">[Data: XX%]</td>
+          </tr>
+          <tr>
+            <td style="padding:3px 0;color:#4A4A4A;">行业应用</td>
+            <td style="padding:3px 0;text-align:right;color:#0A2463;font-weight:600;">[Data: XX%]</td>
+            <td style="padding:3px 0;text-align:right;color:#0A2463;">[Data: XX%]</td>
+          </tr>
+          <tr>
+            <td style="padding:3px 0;color:#4A4A4A;">AI基础设施</td>
+            <td style="padding:3px 0;text-align:right;color:#0A2463;font-weight:600;">[Data: XX%]</td>
+            <td style="padding:3px 0;text-align:right;color:#0A2463;">[Data: XX%]</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 技术成熟度卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0A2463;margin:0 0 8px 0;">技术成熟度曲线</h3>
+        <div style="font-size:9.5px;color:#4A4A4A;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span>LLM推理能力</span>
+            <span style="color:#0A2463;font-weight:600;">[Data: XX%]规模化</span>
+          </div>
+          <div style="width:100%;height:6px;background:#E0E0E0;border-radius:3px;margin-bottom:8px;">
+            <div style="width:[Data: XX%];height:100%;background:#0A2463;border-radius:3px;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span>Agent系统</span>
+            <span style="color:#0A2463;font-weight:600;">[Data: XX%]商业化</span>
+          </div>
+          <div style="width:100%;height:6px;background:#E0E0E0;border-radius:3px;margin-bottom:8px;">
+            <div style="width:[Data: XX%];height:100%;background:#0A2463;border-radius:3px;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span>多模态理解</span>
+            <span style="color:#0A2463;font-weight:600;">[Data: XX%]产品化</span>
+          </div>
+          <div style="width:100%;height:6px;background:#E0E0E0;border-radius:3px;">
+            <div style="width:[Data: XX%];height:100%;background:#0A2463;border-radius:3px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 区域分布 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 14px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:12px;color:#0A2463;margin:0 0 6px 0;">全球区域分布</h3>
+        <div style="display:flex;gap:6px;font-size:9px;">
+          <div style="flex:1;text-align:center;padding:5px 2px;background:#0A2463;color:#FFFFFF;border-radius:2px;">
+            <div style="font-weight:600;">北美 [Data: XX%]</div>
+            <div style="font-size:8px;opacity:0.8;">技术领先</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:5px 2px;background:#4A4A4A;color:#FFFFFF;border-radius:2px;">
+            <div style="font-weight:600;">亚太 [Data: XX%]</div>
+            <div style="font-size:8px;opacity:0.8;">应用活跃</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:5px 2px;background:#9E9E9E;color:#FFFFFF;border-radius:2px;">
+            <div style="font-weight:600;">欧洲 [Data: XX%]</div>
+            <div style="font-size:8px;opacity:0.8;">规范发展</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第三栏：trend_block 趋势分析 + 视觉块 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <!-- 趋势判断卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;flex:1;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:13px;color:#0A2463;margin:0 0 8px 0;">2024-2025关键趋势</h3>
+        <div style="font-size:10px;color:#4A4A4A;line-height:1.6;">
+          <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
+            <span style="color:#0A2463;font-weight:700;">1</span>
+            <p style="margin:0;"><strong>Agent智能体爆发：</strong>从单轮对话向多步任务执行转变，自主完成复杂工作流程</p>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
+            <span style="color:#0A2463;font-weight:700;">2</span>
+            <p style="margin:0;"><strong>长上下文成为标配：</strong>100K-200K token上下文窗口支持整本书籍处理</p>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
+            <span style="color:#0A2463;font-weight:700;">3</span>
+            <p style="margin:0;"><strong>多模态深度融合：</strong>文本、图像、视频、音频统一表征的原生多模态模型</p>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px;">
+            <span style="color:#0A2463;font-weight:700;">4</span>
+            <p style="margin:0;"><strong>推理能力显著提升：</strong>Chain-of-Thought、ReAct等推理框架成熟</p>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:6px;">
+            <span style="color:#0A2463;font-weight:700;">5</span>
+            <p style="margin:0;"><strong>行业垂直深耕：</strong>医疗、法律、金融等领域出现专业化模型</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 技术架构图视觉块 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 14px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:12px;color:#0A2463;margin:0 0 6px 0;">AI系统技术栈</h3>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:9px;">
+          <div style="display:flex;gap:3px;">
+            <div style="flex:1;background:#0A2463;color:#FFFFFF;padding:5px 6px;border-radius:2px;text-align:center;">应用层</div>
+          </div>
+          <div style="display:flex;gap:3px;">
+            <div style="flex:1;background:#4A4A4A;color:#FFFFFF;padding:5px 6px;border-radius:2px;text-align:center;">Agent框架</div>
+            <div style="flex:1;background:#4A4A4A;color:#FFFFFF;padding:5px 6px;border-radius:2px;text-align:center;">RAG系统</div>
+          </div>
+          <div style="display:flex;gap:3px;">
+            <div style="flex:1;background:#9E9E9E;color:#FFFFFF;padding:5px 6px;border-radius:2px;text-align:center;">基础模型层</div>
+          </div>
+          <div style="display:flex;gap:3px;">
+            <div style="flex:1;background:#E0E0E0;color:#4A4A4A;padding:5px 6px;border-radius:2px;text-align:center;">算力基础设施</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 竞争格局 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 14px;">
+        <h3 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:12px;color:#0A2463;margin:0 0 6px 0;">主要竞争者</h3>
+        <div style="font-size:9.5px;color:#4A4A4A;line-height:1.5;">
+          <div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #E0E0E0;">
+            <span>OpenAI / Anthropic</span>
+            <span style="color:#0A2463;">[Data: XX%]份额</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #E0E0E0;">
+            <span>Google / Meta</span>
+            <span style="color:#0A2463;">[Data: XX%]份额</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #E0E0E0;">
+            <span>国内大厂（BAT/字节）</span>
+            <span style="color:#0A2463;">[Data: XX%]份额</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:2px 0;">
+            <span>开源生态（HuggingFace）</span>
+            <span style="color:#0A2463;">[Data: XX%]份额</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 底部数据来源标注 -->
+  <div style="position:absolute;bottom:12px;left:48px;right:48px;display:flex;justify-content:space-between;font-size:8.5px;color:#9E9E9E;border-top:1px solid #E0E0E0;padding-top:6px;">
+    <span>数据来源：IDC、Gartner、行业研究报告综合 | 对话分析整理</span>
+    <span>Page 3 of 12 | AI发展现状与趋势</span>
+  </div>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p04" class="deck-page" style="width: 100%; height: 100%; padding: 36px 48px; box-sizing: border-box; overflow: hidden; font-family: Arial, Roboto, sans-serif; background: rgb(255, 255, 255); color: rgb(0, 0, 0); justify-content: start; align-items: start;" data-layout-scope="scope-page-root" data-layout-padding="36" data-layout-width-ratio="100" data-layout-density="spacious" data-layout-module-order="scope-page-root-module-1,scope-page-root-module-2,scope-page-root-module-3,scope-page-root-module-4,scope-page-root-module-5,scope-page-root-module-6,scope-page-root-module-7" data-layout-module-visibility="scope-page-root-module-1:visible,scope-page-root-module-2:visible,scope-page-root-module-3:visible,scope-page-root-module-4:visible,scope-page-root-module-5:visible,scope-page-root-module-6:visible,scope-page-root-module-7:visible" data-layout-justify="start" data-layout-align="start"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- So What 行动标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:24px;color:#000000;font-weight:700;margin:0 0 4px 0;line-height:1.3;" data-layout-module-id="scope-page-root-module-1" data-node-id="heading-1" data-node-kind="heading" data-editable="true">
+    长上下文与多模态融合重塑大模型竞争格局，Agent智能体成新一代AI核心赛道
+  </h1>
+  <p style="font-family:Arial,sans-serif;font-size:11px;color:#9E9E9E;margin:0 0 12px 0;" data-layout-module-id="scope-page-root-module-2" data-node-id="paragraph-1" data-node-kind="paragraph" data-editable="true">
+    深入分析2024-2025年大模型技术演进方向与全球竞争态势
+  </p>
+  <div style="width:50px;height:3px;background:#0A2463;margin-bottom:16px;" data-layout-module-id="scope-page-root-module-3"></div>
+
+  <!-- 核心观点摘要条 -->
+  
+
+  <!-- 三栏核心特性卡片 -->
+  <div style="display:flex;gap:12px;margin-bottom:14px;" data-layout-module-id="scope-page-root-module-4">
+    <div style="flex:1;background:#F5F7FA;border-left:3px solid #0A2463;padding:8px 12px;border-radius:0 4px 4px 0;">
+      <span style="font-size:10px;color:#9E9E9E;">技术标配</span>
+      <p style="font-size:12px;color:#000000;margin:2px 0 0 0;font-weight:600;" data-node-id="paragraph-2" data-node-kind="paragraph" data-editable="true">上下文窗口突破100K-200K token</p>
+    </div>
+    <div style="flex:1;background:#F5F7FA;border-left:3px solid #0A2463;padding:8px 12px;border-radius:0 4px 4px 0;">
+      <span style="font-size:10px;color:#9E9E9E;">融合能力</span>
+      <p style="font-size:12px;color:#000000;margin:2px 0 0 0;font-weight:600;" data-node-id="paragraph-3" data-node-kind="paragraph" data-editable="true">文本/图像/音频/视频多模态统一</p>
+    </div>
+    <div style="flex:1;background:#F5F7FA;border-left:3px solid #0A2463;padding:8px 12px;border-radius:0 4px 4px 0;">
+      <span style="font-size:10px;color:#9E9E9E;">核心方向</span>
+      <p style="font-size:12px;color:#000000;margin:2px 0 0 0;font-weight:600;" data-node-id="paragraph-4" data-node-kind="paragraph" data-editable="true">Agent智能体具备规划·工具·记忆·协作</p>
+    </div>
+  </div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;" data-layout-module-id="scope-page-root-module-5">
+    <!-- Feature Block 1: 长上下文 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;background:#FFFFFF;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:file-document-outline" style="font-size:18px;color:#0A2463;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:700;" data-node-id="heading-2" data-node-kind="heading" data-editable="true">长上下文技术</h3>
+      </div>
+      <p style="font-size:11px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;" data-node-id="paragraph-5" data-node-kind="paragraph" data-editable="true">
+        支持100K-200K token超长上下文窗口，可一次性处理整本书籍、代码库或长时对话，显著提升复杂任务理解能力。
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:10px;">
+        <tbody><tr><th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:left;color:#9E9E9E;font-weight:500;" data-node-id="table_cell-1" data-node-kind="table_cell" data-editable="true">指标</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:4px 0;text-align:right;color:#9E9E9E;font-weight:500;" data-node-id="table_cell-2" data-node-kind="table_cell" data-editable="true">行业水平</th></tr>
+        <tr><td style="padding:3px 0;color:#4A4A4A;" data-node-id="table_cell-3" data-node-kind="table_cell" data-editable="true">主流上下文</td><td style="padding:3px 0;text-align:right;color:#0A2463;font-weight:600;" data-node-id="table_cell-4" data-node-kind="table_cell" data-editable="true">128K token</td></tr>
+        <tr><td style="padding:3px 0;color:#4A4A4A;" data-node-id="table_cell-5" data-node-kind="table_cell" data-editable="true">前沿突破</td><td style="padding:3px 0;text-align:right;color:#0A2463;font-weight:600;" data-node-id="table_cell-6" data-node-kind="table_cell" data-editable="true">200K+ token</td></tr>
+        <tr><td style="padding:3px 0;color:#4A4A4A;" data-node-id="table_cell-7" data-node-kind="table_cell" data-editable="true">处理速度提升</td><td style="padding:3px 0;text-align:right;color:#0A2463;font-weight:600;" data-node-id="table_cell-8" data-node-kind="table_cell" data-editable="true">[Data: XX%]</td></tr>
+      </tbody></table>
+    </div>
+
+    <!-- Feature Block 2: 多模态融合 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;background:#FFFFFF;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:google-circles-communities" style="font-size:18px;color:#0A2463;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:700;" data-node-id="heading-3" data-node-kind="heading" data-editable="true">多模态融合</h3>
+      </div>
+      <p style="font-size:11px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;" data-node-id="paragraph-6" data-node-kind="paragraph" data-editable="true">
+        统一处理文本、图像、音频、视频等多模态信息，实现跨模态理解与生成，支撑端到端多任务处理能力。
+      </p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        <span style="background:#E8EEF5;color:#0A2463;font-size:9px;padding:3px 8px;border-radius:10px;">文本理解</span>
+        <span style="background:#E8EEF5;color:#0A2463;font-size:9px;padding:3px 8px;border-radius:10px;">图像识别</span>
+        <span style="background:#E8EEF5;color:#0A2463;font-size:9px;padding:3px 8px;border-radius:10px;">语音合成</span>
+        <span style="background:#E8EEF5;color:#0A2463;font-size:9px;padding:3px 8px;border-radius:10px;">视频分析</span>
+        <span style="background:#E8EEF5;color:#0A2463;font-size:9px;padding:3px 8px;border-radius:10px;">跨模态检索</span>
+      </div>
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid #E0E0E0;">
+        <span style="font-size:10px;color:#9E9E9E;">代表模型：</span>
+        <span style="font-size:10px;color:#4A4A4A;">GPT-4V、Gemini Pro、Claude 3、Qwen-VL</span>
+      </div>
+    </div>
+
+    <!-- Feature Block 3: Agent智能体 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;background:#FFFFFF;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:robot" style="font-size:18px;color:#0A2463;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:700;" data-node-id="heading-4" data-node-kind="heading" data-editable="true">Agent智能体</h3>
+      </div>
+      <p style="font-size:11px;color:#4A4A4A;line-height:1.6;margin:0 0 10px 0;" data-node-id="paragraph-7" data-node-kind="paragraph" data-editable="true">
+        具备自主规划、工具调用、长期记忆、多Agent协作的新一代AI系统，可自主完成复杂多步骤任务。
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px;">
+        <div style="background:#F8F9FA;padding:6px 8px;border-radius:3px;text-align:center;">
+          <iconify-icon icon="mdi:head-lightbulb" style="font-size:14px;color:#0A2463;display:block;margin-bottom:2px;"></iconify-icon>
+          <span style="color:#4A4A4A;">自主规划</span>
+        </div>
+        <div style="background:#F8F9FA;padding:6px 8px;border-radius:3px;text-align:center;">
+          <iconify-icon icon="mdi:toolbox" style="font-size:14px;color:#0A2463;display:block;margin-bottom:2px;"></iconify-icon>
+          <span style="color:#4A4A4A;">工具调用</span>
+        </div>
+        <div style="background:#F8F9FA;padding:6px 8px;border-radius:3px;text-align:center;">
+          <iconify-icon icon="mdi:brain" style="font-size:14px;color:#0A2463;display:block;margin-bottom:2px;"></iconify-icon>
+          <span style="color:#4A4A4A;">长期记忆</span>
+        </div>
+        <div style="background:#F8F9FA;padding:6px 8px;border-radius:3px;text-align:center;">
+          <iconify-icon icon="mdi:account-group" style="font-size:14px;color:#0A2463;display:block;margin-bottom:2px;"></iconify-icon>
+          <span style="color:#4A4A4A;">多Agent协作</span>
+        </div>
+      </div>
+    </div>
+  </div><div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;height:220px;" data-layout-module-id="scope-page-root-module-6">
+    <!-- Comparison Block: 技术路线对比 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;background:#FFFFFF;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:table" style="font-size:16px;color:#0A2463;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0A2463;margin:0;font-weight:700;" data-node-id="heading-5" data-node-kind="heading" data-editable="true">主流大模型技术路线对比</h3>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:10px;">
+        <tbody><tr>
+          <th style="border-bottom:1px solid #E0E0E0;padding:4px 6px;text-align:left;color:#9E9E9E;font-weight:600;background:#F8F9FA;" data-node-id="table_cell-9" data-node-kind="table_cell" data-editable="true">厂商</th>
+          <th style="border-bottom:1px solid #E0E0E0;padding:4px 6px;text-align:center;color:#9E9E9E;font-weight:600;background:#F8F9FA;" data-node-id="table_cell-10" data-node-kind="table_cell" data-editable="true">上下文</th>
+          <th style="border-bottom:1px solid #E0E0E0;padding:4px 6px;text-align:center;color:#9E9E9E;font-weight:600;background:#F8F9FA;" data-node-id="table_cell-11" data-node-kind="table_cell" data-editable="true">多模态</th>
+          <th style="border-bottom:1px solid #E0E0E0;padding:4px 6px;text-align:center;color:#9E9E9E;font-weight:600;background:#F8F9FA;" data-node-id="table_cell-12" data-node-kind="table_cell" data-editable="true">Agent</th>
+          <th style="border-bottom:1px solid #E0E0E0;padding:4px 6px;text-align:center;color:#9E9E9E;font-weight:600;background:#F8F9FA;" data-node-id="table_cell-13" data-node-kind="table_cell" data-editable="true">开源</th>
+        </tr>
+        <tr>
+          <td style="padding:4px 6px;color:#4A4A4A;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-14" data-node-kind="table_cell" data-editable="true">OpenAI GPT-4系列</td>
+          <td style="padding:4px 6px;text-align:center;color:#0A2463;font-weight:600;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-15" data-node-kind="table_cell" data-editable="true">128K</td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:close" style="font-size:12px;color:#9E9E9E;"></iconify-icon></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 6px;color:#4A4A4A;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-16" data-node-kind="table_cell" data-editable="true">Anthropic Claude 3</td>
+          <td style="padding:4px 6px;text-align:center;color:#0A2463;font-weight:600;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-17" data-node-kind="table_cell" data-editable="true">200K</td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:close" style="font-size:12px;color:#9E9E9E;"></iconify-icon></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 6px;color:#4A4A4A;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-18" data-node-kind="table_cell" data-editable="true">Google Gemini</td>
+          <td style="padding:4px 6px;text-align:center;color:#0A2463;font-weight:600;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-19" data-node-kind="table_cell" data-editable="true">1M</td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:close" style="font-size:12px;color:#9E9E9E;"></iconify-icon></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 6px;color:#4A4A4A;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-20" data-node-kind="table_cell" data-editable="true">Meta Llama 3</td>
+          <td style="padding:4px 6px;text-align:center;color:#0A2463;font-weight:600;border-bottom:1px solid #E8EEF5;" data-node-id="table_cell-21" data-node-kind="table_cell" data-editable="true">128K</td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:minus" style="font-size:12px;color:#9E9E9E;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;border-bottom:1px solid #E8EEF5;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+        </tr>
+        <tr>
+          <td style="padding:4px 6px;color:#4A4A4A;" data-node-id="table_cell-22" data-node-kind="table_cell" data-editable="true">国内头部模型(通义/混元/文心)</td>
+          <td style="padding:4px 6px;text-align:center;color:#0A2463;font-weight:600;" data-node-id="table_cell-23" data-node-kind="table_cell" data-editable="true">100K+</td>
+          <td style="padding:4px 6px;text-align:center;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;"><iconify-icon icon="mdi:check" style="font-size:12px;color:#0A2463;"></iconify-icon></td>
+          <td style="padding:4px 6px;text-align:center;"><iconify-icon icon="mdi:minus" style="font-size:12px;color:#9E9E9E;"></iconify-icon></td>
+        </tr>
+      </tbody></table>
+    </div>
+
+    <!-- Insight Block: 关键洞察 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;background:#FFFFFF;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:lightbulb" style="font-size:16px;color:#0A2463;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0A2463;margin:0;font-weight:700;" data-node-id="heading-6" data-node-kind="heading" data-editable="true">竞争格局洞察</h3>
+      </div>
+      <div style="font-size:10px;color:#4A4A4A;line-height:1.7;">
+        <div style="margin-bottom:8px;padding-left:10px;border-left:2px solid #0A2463;">
+          <strong style="color:#000000;">技术收敛：</strong>长上下文与多模态已成行业准入门槛，差异化竞争转向Agent能力深度
+        </div>
+        <div style="margin-bottom:8px;padding-left:10px;border-left:2px solid #0A2463;">
+          <strong style="color:#000000;">开源崛起：</strong>Llama系列推动开源生态，垂直领域微调模型快速涌现
+        </div>
+        <div style="margin-bottom:8px;padding-left:10px;border-left:2px solid #0A2463;">
+          <strong style="color:#000000;">算力瓶颈：</strong>模型能力提升受限于GPU资源，头部厂商算力投入决定技术代际
+        </div>
+        <div style="padding-left:10px;border-left:2px solid #0A2463;">
+          <strong style="color:#000000;">落地分化：</strong>通用大模型同质化严重，场景化Agent解决方案成变现关键
+        </div>
+      </div>
+    </div>
+
+    <!-- 视觉块: 技术演进时间线 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px 14px;background:#FFFFFF;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <iconify-icon icon="mdi:chart-timeline-variant" style="font-size:16px;color:#0A2463;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#0A2463;margin:0;font-weight:700;" data-node-id="heading-7" data-node-kind="heading" data-editable="true">技术演进路线</h3>
+      </div>
+      <div style="position:relative;padding-left:20px;border-left:2px solid #E0E0E0;margin-left:8px;">
+        <div style="margin-bottom:12px;position:relative;">
+          <div style="position:absolute;left:-24px;top:2px;width:10px;height:10px;background:#0A2463;border-radius:50%;"></div>
+          <span style="font-size:9px;color:#9E9E9E;">2023H1</span>
+          <p style="font-size:10px;color:#4A4A4A;margin:1px 0 0 0;" data-node-id="paragraph-8" data-node-kind="paragraph" data-editable="true">LLM突破，ChatGPT引爆市场</p>
+        </div>
+        <div style="margin-bottom:12px;position:relative;">
+          <div style="position:absolute;left:-24px;top:2px;width:10px;height:10px;background:#0A2463;border-radius:50%;"></div>
+          <span style="font-size:9px;color:#9E9E9E;">2023H2</span>
+          <p style="font-size:10px;color:#4A4A4A;margin:1px 0 0 0;" data-node-id="paragraph-9" data-node-kind="paragraph" data-editable="true">多模态融合，GPT-4V发布</p>
+        </div>
+        <div style="margin-bottom:12px;position:relative;">
+          <div style="position:absolute;left:-24px;top:2px;width:10px;height:10px;background:#0A2463;border-radius:50%;"></div>
+          <span style="font-size:9px;color:#9E9E9E;">2024H1</span>
+          <p style="font-size:10px;color:#4A4A4A;margin:1px 0 0 0;" data-node-id="paragraph-10" data-node-kind="paragraph" data-editable="true">长上下文标配，Claude 3.5/Gemini</p>
+        </div>
+        <div style="margin-bottom:12px;position:relative;">
+          <div style="position:absolute;left:-24px;top:2px;width:10px;height:10px;background:#0A2463;border-radius:50%;"></div>
+          <span style="font-size:9px;color:#9E9E9E;">2024H2</span>
+          <p style="font-size:10px;color:#4A4A4A;margin:1px 0 0 0;" data-node-id="paragraph-11" data-node-kind="paragraph" data-editable="true">Agent爆发，o1/GPT-o1/RPA集成</p>
+        </div>
+        <div style="position:relative;">
+          <div style="position:absolute;left:-24px;top:2px;width:10px;height:10px;background:#0A2463;border-radius:50%;"></div>
+          <span style="font-size:9px;color:#0A2463;font-weight:600;">2025→</span>
+          <p style="font-size:10px;color:#0A2463;font-weight:600;margin:1px 0 0 0;" data-node-id="paragraph-12" data-node-kind="paragraph" data-editable="true">自主Agent主导，AGI探索加速</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部对比与洞察区域 -->
+  <div style="position:absolute;bottom:12px;left:48px;right:48px;display:flex;justify-content:space-between;font-size:9px;color:#9E9E9E;" data-layout-module-id="scope-page-root-module-7">
+    <span>数据来源：对话分析 · 市场调研综合整理 [待确认]</span>
+    <span>Page 04 / 12</span>
+  </div>
+
+  <!-- 底部数据来源标注 -->
+  
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p05" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:40px 48px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  
+  <!-- So What 行动标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:24px;color:#000000;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    2024-2025年AI在推理、多模态、长上下文与Agent规划四大维度实现突破性进展
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#9E9E9E;margin:0 0 12px 0;">2024Q1-2025Q2 技术演进综合分析 · 对话分析来源</p>
+  <div style="width:56px;height:3px;background:#0A2463;margin-bottom:16px;"></div>
+
+  <!-- breakthrough_block: 四大技术突破概览 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
+    
+    <!-- 突破1: 推理能力 -->
+    <div class="s-card" style="padding:14px 16px;border:1px solid #E0E0E0;border-radius:4px;">
+      <div style="display:flex;align-items:center;margin-bottom:8px;">
+        <iconify-icon icon="mdi:brain" style="font-size:18px;color:#0A2463;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">推理能力突破</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+        从"预测下一个词"进化到"预测世界状态"，Chain-of-Thought推理链与强化学习融合，逻辑推导能力接近人类专家水平
+      </p>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #E0E0E0;">
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;">数学推理</span>
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;margin-left:4px;">代码生成</span>
+      </div>
+    </div>
+
+    <!-- 突破2: 多模态理解 -->
+    <div class="s-card" style="padding:14px 16px;border:1px solid #E0E0E0;border-radius:4px;">
+      <div style="display:flex;align-items:center;margin-bottom:8px;">
+        <iconify-icon icon="mdi:eye" style="font-size:18px;color:#0A2463;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">多模态理解</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+        文本、图像、视频、音频统一表示学习，跨模态理解与生成能力显著提升，实现"看图说话"到"图文创作"的跨越
+      </p>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #E0E0E0;">
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;">视觉-语言</span>
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;margin-left:4px;">音频-文本</span>
+      </div>
+    </div>
+
+    <!-- 突破3: 长上下文处理 -->
+    <div class="s-card" style="padding:14px 16px;border:1px solid #E0E0E0;border-radius:4px;">
+      <div style="display:flex;align-items:center;margin-bottom:8px;">
+        <iconify-icon icon="mdi:file-document-multiple" style="font-size:18px;color:#0A2463;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">长上下文处理</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+        上下文窗口从8K扩展至200K+token，稀疏注意力机制与高效位置编码使长文档理解与多轮对话成为标配
+      </p>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #E0E0E0;">
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;">100K-200K</span>
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;margin-left:4px;">稀疏注意力</span>
+      </div>
+    </div>
+
+    <!-- 突破4: Agent规划 -->
+    <div class="s-card" style="padding:14px 16px;border:1px solid #E0E0E0;border-radius:4px;">
+      <div style="display:flex;align-items:center;margin-bottom:8px;">
+        <iconify-icon icon="mdi:robot" style="font-size:18px;color:#0A2463;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">Agent规划能力</h3>
+      </div>
+      <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0;">
+        具备任务分解、工具调用、自我反思能力，可自主规划执行复杂多步骤任务，从"被动回答"进化到"主动执行"
+      </p>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #E0E0E0;">
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;">ReAct</span>
+        <span class="s-badge" style="background:#E0E0E0;color:#4A4A4A;font-size:10px;padding:2px 6px;border-radius:2px;margin-left:4px;">工具调用</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- tech_spec_block: 技术演进路径对比 -->
+  <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-bottom:14px;">
+    
+    <!-- 技术演进时间线 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 12px 0;font-weight:600;">AI技术演进路径</h3>
+      <div style="display:flex;align-items:center;gap:0;position:relative;">
+        
+        <!-- 节点1 -->
+        <div style="text-align:center;flex:1;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#0A2463;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+            <iconify-icon icon="mdi:text" style="font-size:20px;color:#FFFFFF;"></iconify-icon>
+          </div>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#000000;font-weight:600;margin:0;">LLM基础</p>
+          <p style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;margin:2px 0 0 0;">Transformer</p>
+        </div>
+        
+        <!-- 连接线 -->
+        <div style="flex:0.3;height:2px;background:#E0E0E0;margin-bottom:24px;"></div>
+        
+        <!-- 节点2 -->
+        <div style="text-align:center;flex:1;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#0A2463;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+            <iconify-icon icon="mdi:brain" style="font-size:20px;color:#FFFFFF;"></iconify-icon>
+          </div>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#000000;font-weight:600;margin:0;">推理增强</p>
+          <p style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;margin:2px 0 0 0;">CoT+RLAIF</p>
+        </div>
+        
+        <!-- 连接线 -->
+        <div style="flex:0.3;height:2px;background:#E0E0E0;margin-bottom:24px;"></div>
+        
+        <!-- 节点3 -->
+        <div style="text-align:center;flex:1;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#0A2463;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+            <iconify-icon icon="mdi:eye" style="font-size:20px;color:#FFFFFF;"></iconify-icon>
+          </div>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#000000;font-weight:600;margin:0;">多模态融合</p>
+          <p style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;margin:2px 0 0 0;">CLIP/ImageBind</p>
+        </div>
+        
+        <!-- 连接线 -->
+        <div style="flex:0.3;height:2px;background:#E0E0E0;margin-bottom:24px;"></div>
+        
+        <!-- 节点4 -->
+        <div style="text-align:center;flex:1;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#0A2463;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;">
+            <iconify-icon icon="mdi:rocket-launch" style="font-size:20px;color:#FFFFFF;"></iconify-icon>
+          </div>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#000000;font-weight:600;margin:0;">Agent智能体</p>
+          <p style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;margin:2px 0 0 0;">自主行动</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 技术原理通俗解释 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 10px 0;font-weight:600;">核心技术原理</h3>
+      
+      <div style="margin-bottom:8px;">
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;font-weight:600;margin:0 0 3px 0;">
+          <iconify-icon icon="mdi:lightbulb" style="font-size:12px;color:#0A2463;margin-right:4px;vertical-align:middle;"></iconify-icon>Chain-of-Thought
+        </p>
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#9E9E9E;margin:0;line-height:1.4;">
+          引导模型"分步思考"，像人类一样先分析问题再给出答案
+        </p>
+      </div>
+      
+      <div style="margin-bottom:8px;">
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;font-weight:600;margin:0 0 3px 0;">
+          <iconify-icon icon="mdi:lightbulb" style="font-size:12px;color:#0A2463;margin-right:4px;vertical-align:middle;"></iconify-icon>稀疏注意力
+        </p>
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#9E9E9E;margin:0;line-height:1.4;">
+          只关注关键token而非全部内容，大幅降低长文本处理计算量
+        </p>
+      </div>
+      
+      <div style="margin-bottom:0;">
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;font-weight:600;margin:0 0 3px 0;">
+          <iconify-icon icon="mdi:lightbulb" style="font-size:12px;color:#0A2463;margin-right:4px;vertical-align:middle;"></iconify-icon>强化学习对齐
+        </p>
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#9E9E9E;margin:0;line-height:1.4;">
+          通过人类反馈信号优化模型输出，使AI更符合人类期望
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- impact_block: 影响分析与数据 -->
+  <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:12px;">
+    
+    <!-- 影响分析表格 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 10px 0;font-weight:600;">技术突破影响评估</h3>
+      <table class="s-table" style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:11px;">
+        <tr>
+          <th style="border-bottom:1px solid #E0E0E0;padding:6px 0;text-align:left;color:#9E9E9E;font-weight:500;">技术维度</th>
+          <th style="border-bottom:1px solid #E0E0E0;padding:6px 0;text-align:center;color:#9E9E9E;font-weight:500;">成熟度</th>
+          <th style="border-bottom:1px solid #E0E0E0;padding:6px 0;text-align:right;color:#9E9E9E;font-weight:500;">应用渗透率</th>
+        </tr>
+        <tr>
+          <td style="padding:5px 0;color:#000000;">推理能力</td>
+          <td style="padding:5px 0;text-align:center;"><span style="background:#0A2463;color:#FFFFFF;font-size:9px;padding:2px 5px;border-radius:2px;">成熟</span></td>
+          <td style="padding:5px 0;text-align:right;color:#0A2463;font-weight:600;">[Data: XX%]</td>
+        </tr>
+        <tr>
+          <td style="padding:5px 0;color:#000000;">多模态理解</td>
+          <td style="padding:5px 0;text-align:center;"><span style="background:#0A2463;color:#FFFFFF;font-size:9px;padding:2px 5px;border-radius:2px;">成熟</span></td>
+          <td style="padding:5px 0;text-align:right;color:#0A2463;font-weight:600;">[Data: XX%]</td>
+        </tr>
+        <tr>
+          <td style="padding:5px 0;color:#000000;">长上下文</td>
+          <td style="padding:5px 0;text-align:center;"><span style="background:#4A4A4A;color:#FFFFFF;font-size:9px;padding:2px 5px;border-radius:2px;">发展中</span></td>
+          <td style="padding:5px 0;text-align:right;color:#0A2463;font-weight:600;">[Data: XX%]</td>
+        </tr>
+        <tr style="background:#F8F8F8;">
+          <td style="padding:5px 0;color:#000000;">Agent规划</td>
+          <td style="padding:5px 0;text-align:center;"><span style="background:#E0E0E0;color:#4A4A4A;font-size:9px;padding:2px 5px;border-radius:2px;">早期</span></td>
+          <td style="padding:5px 0;text-align:right;color:#0A2463;font-weight:600;">[Data: XX%]</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- 性能提升统计 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 10px 0;font-weight:600;">性能提升指标</h3>
+      
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;">数学推理准确率</span>
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;">[Data: XX%]</span>
+        </div>
+        <div style="height:6px;background:#E0E0E0;border-radius:3px;overflow:hidden;">
+          <div style="width:78%;height:100%;background:#0A2463;border-radius:3px;"></div>
+        </div>
+      </div>
+      
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;">代码生成质量</span>
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;">[Data: XX%]</span>
+        </div>
+        <div style="height:6px;background:#E0E0E0;border-radius:3px;overflow:hidden;">
+          <div style="width:72%;height:100%;background:#0A2463;border-radius:3px;"></div>
+        </div>
+      </div>
+      
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;">多模态理解力</span>
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;">[Data: XX%]</span>
+        </div>
+        <div style="height:6px;background:#E0E0E0;border-radius:3px;overflow:hidden;">
+          <div style="width:65%;height:100%;background:#0A2463;border-radius:3px;"></div>
+        </div>
+      </div>
+      
+      <div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;">Agent任务完成率</span>
+          <span style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;">[Data: XX%]</span>
+        </div>
+        <div style="height:6px;background:#E0E0E0;border-radius:3px;overflow:hidden;">
+          <div style="width:45%;height:100%;background:#0A2463;border-radius:3px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 关键洞察 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;background:#F8F9FA;">
+      <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 10px 0;font-weight:600;">关键洞察</h3>
+      
+      <div class="s-alert" style="margin-bottom:8px;padding:8px 10px;border-left:3px solid #0A2463;background:#FFFFFF;">
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.4;margin:0;">
+          <strong style="color:#000000;">范式转变：</strong>从单一语言模型向"模型+工具+环境"交互体系演进
+        </p>
+      </div>
+      
+      <div class="s-alert" style="margin-bottom:8px;padding:8px 10px;border-left:3px solid #0A2463;background:#FFFFFF;">
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.4;margin:0;">
+          <strong style="color:#000000;">能力融合：</strong>推理能力是多模态与Agent的基础，决定上层应用天花板
+        </p>
+      </div>
+      
+      <div class="s-alert" style="padding:8px 10px;border-left:3px solid #0A2463;background:#FFFFFF;">
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.4;margin:0;">
+          <strong style="color:#000000;">落地节奏：</strong>语言推理与多模态已成熟，Agent规划处于商业化早期
+        </p>
+      </div>
+    </div>
+  </div>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p06" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- So What 行动标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:24px;color:#000000;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    智能客服与代码开发成为AI落地最成熟领域，效率提升超40%，单次服务成本下降60%
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:11px;color:#9E9E9E;margin:0 0 12px 0;">基于行业调研与对话分析 · 数据截至 2024Q3</p>
+  <div style="width:50px;height:3px;background:#0A2463;margin-bottom:16px;"></div>
+
+  <!-- 主内容区：3栏布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;height:calc(100% - 95px);">
+
+    <!-- 第1栏：智能客服案例 -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px;background:#FAFAFA;">
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 10px 0;">🏠 智能客服应用场景</h3>
+        <div style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.7;">
+          <p style="margin:0 0 8px 0;"><strong>电商平台：</strong>智能问答、订单查询、售后处理，覆盖80%+常见问题</p>
+          <p style="margin:0 0 8px 0;"><strong>金融机构：</strong>信用卡咨询、理财推荐、风险提示，合规性保障</p>
+          <p style="margin:0;"><strong>电信运营商：</strong>套餐推荐、故障排查、费用解释，7×24小时服务</p>
+        </div>
+      </div>
+
+      <!-- 智能客服效率对比柱状图 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px;flex:1;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:13px;color:#0A2463;margin:0 0 12px 0;">⏱️ 响应效率对比</h4>
+        <div style="display:flex;align-items:flex-end;gap:20px;height:100px;padding-bottom:24px;border-bottom:1px solid #E0E0E0;margin-bottom:8px;">
+          <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
+            <div style="width:40px;background:#0A2463;height:85px;border-radius:2px 2px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:4px;">
+              <span style="font-size:10px;color:#FFFFFF;font-weight:600;">85%</span>
+            </div>
+            <span style="font-size:9px;color:#4A4A4A;margin-top:6px;">AI客服</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;flex:1;">
+            <div style="width:40px;background:#9E9E9E;height:25px;border-radius:2px 2px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:4px;">
+              <span style="font-size:10px;color:#FFFFFF;font-weight:600;">25%</span>
+            </div>
+            <span style="font-size:9px;color:#4A4A4A;margin-top:6px;">传统人工</span>
+          </div>
+        </div>
+        <p style="font-size:9px;color:#9E9E9E;margin:0;">数据来源：行业调研 [待确认]</p>
+      </div>
+    </div>
+
+    <!-- 第2栏：代码开发案例+成熟度矩阵 -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px;">
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 10px 0;">💻 代码开发应用场景</h3>
+        <div style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.7;">
+          <p style="margin:0 0 8px 0;"><strong>代码补全：</strong>GitHub Copilot、通义灵码，实时代码建议</p>
+          <p style="margin:0 0 8px 0;"><strong>代码审查：</strong>自动检测Bug、安全漏洞、代码异味</p>
+          <p style="margin:0 0 8px 0;"><strong>文档生成：</strong>API文档、注释自动生成、技术方案撰写</p>
+          <p style="margin:0;"><strong>测试用例：</strong>单元测试、集成测试自动生成，覆盖率提升[Data: XX%]</p>
+        </div>
+      </div>
+
+      <!-- 2x2成熟度矩阵 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px;flex:1;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:13px;color:#0A2463;margin:0 0 10px 0;">📊 AI应用成熟度矩阵</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;height:calc(100% - 30px);">
+          <div style="background:#0A2463;border-radius:3px;padding:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+            <span style="font-size:18px;color:#FFFFFF;">★★★</span>
+            <span style="font-size:10px;color:#FFFFFF;margin-top:4px;">智能客服</span>
+            <span style="font-size:9px;color:#E0E0E0;">成熟度高</span>
+          </div>
+          <div style="background:#0A2463;border-radius:3px;padding:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+            <span style="font-size:18px;color:#FFFFFF;">★★★</span>
+            <span style="font-size:10px;color:#FFFFFF;margin-top:4px;">代码开发</span>
+            <span style="font-size:9px;color:#E0E0E0;">成熟度高</span>
+          </div>
+          <div style="background:#E0E0E0;border-radius:3px;padding:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+            <span style="font-size:18px;color:#9E9E9E;">★★</span>
+            <span style="font-size:10px;color:#4A4A4A;margin-top:4px;">医疗诊断</span>
+            <span style="font-size:9px;color:#9E9E9E;">快速发展</span>
+          </div>
+          <div style="background:#E0E0E0;border-radius:3px;padding:10px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+            <span style="font-size:18px;color:#9E9E9E;">★</span>
+            <span style="font-size:10px;color:#4A4A4A;margin-top:4px;">自动驾驶</span>
+            <span style="font-size:9px;color:#9E9E9E;">受限场景</span>
+          </div>
+        </div>
+        <p style="font-size:9px;color:#9E9E9E;margin:8px 0 0 0;">基于技术成熟度与商业落地程度评估</p>
+      </div>
+    </div>
+
+    <!-- 第3栏：价值指标+商业价值 -->
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <!-- 核心指标卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:13px;color:#0A2463;margin:0 0 10px 0;">📈 关键绩效指标</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="text-align:center;padding:10px;background:#FAFAFA;border-radius:3px;">
+            <div style="font-size:22px;font-weight:700;color:#0A2463;">↑40%</div>
+            <div style="font-size:9px;color:#4A4A4A;margin-top:2px;">效率提升</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:#FAFAFA;border-radius:3px;">
+            <div style="font-size:22px;font-weight:700;color:#0A2463;">↓60%</div>
+            <div style="font-size:9px;color:#4A4A4A;margin-top:2px;">成本降低</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:#FAFAFA;border-radius:3px;">
+            <div style="font-size:22px;font-weight:700;color:#0A2463;">85%</div>
+            <div style="font-size:9px;color:#4A4A4A;margin-top:2px;">问题解决率</div>
+          </div>
+          <div style="text-align:center;padding:10px;background:#FAFAFA;border-radius:3px;">
+            <div style="font-size:22px;font-weight:700;color:#0A2463;">24/7</div>
+            <div style="font-size:9px;color:#4A4A4A;margin-top:2px;">服务覆盖</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 商业价值分析 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px;flex:1;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:13px;color:#0A2463;margin:0 0 10px 0;">💰 商业价值分析</h4>
+        <div style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.7;">
+          <div style="display:flex;align-items:flex-start;margin-bottom:8px;">
+            <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#0A2463;margin-right:6px;flex-shrink:0;"></iconify-icon>
+            <span><strong>人力成本节约：</strong>减少[Data: XX%]客服人力投入，年节省成本超百万</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;margin-bottom:8px;">
+            <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#0A2463;margin-right:6px;flex-shrink:0;"></iconify-icon>
+            <span><strong>开发效率提升：</strong>代码编写时间缩短[Data: XX%]，迭代速度加快</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;margin-bottom:8px;">
+            <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#0A2463;margin-right:6px;flex-shrink:0;"></iconify-icon>
+            <span><strong>服务质量提升：</strong>响应时间从分钟级降至秒级，客户满意度↑</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;">
+            <iconify-icon icon="mdi:check-circle" style="font-size:14px;color:#0A2463;margin-right:6px;flex-shrink:0;"></iconify-icon>
+            <span><strong>规模效应显著：</strong>边际成本趋近于零，服务能力弹性扩展</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 趋势箭头说明 -->
+      <div style="background:#F0F4F8;border-radius:4px;padding:10px 12px;border-left:3px solid #0A2463;">
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;margin:0;line-height:1.6;">
+          <strong style="color:#0A2463;">趋势洞察：</strong>AI落地正从"单点应用"向"全流程赋能"演进，未来3年渗透率预计超70%
+        </p>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p07" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- So What 行动标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:22px;color:#000000;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    医疗健康与自动驾驶AI已进入规模化落地阶段，但监管审批与技术可靠性仍是商业化核心瓶颈
+  </h1>
+  <p style="font-family:Arial,sans-serif;font-size:11px;color:#9E9E9E;margin:0 0 10px 0;">
+    行业应用深度分析 · 数据截至 2024Q3
+  </p>
+  <div style="width:50px;height:3px;background:#0A2463;margin-bottom:14px;"></div>
+
+  <!-- 主体3栏布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;height:calc(100% - 90px);">
+    
+    <!-- 第一栏：医疗健康案例 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="border:1px solid #E0E0E0;border-left:3px solid #0A2463;padding:10px 12px;">
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 6px 0;font-weight:600;">医疗健康AI应用</h3>
+        <p style="font-family:Arial,sans-serif;font-size:10.5px;color:#4A4A4A;line-height:1.5;margin:0 0 8px 0;">
+          AI辅助诊断、影像识别、药物研发等领域加速渗透，显著提升诊疗效率与精准度
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:#F5F7FA;padding:6px 8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:16px;color:#0A2463;font-weight:700;">[Data: XX%]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">影像识别准确率</div>
+          </div>
+          <div style="background:#F5F7FA;padding:6px 8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:16px;color:#0A2463;font-weight:700;">[Data: XX]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">三甲医院覆盖率</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 成熟度对比图表 -->
+      <div style="border:1px solid #E0E0E0;padding:10px 12px;flex:1;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:12px;color:#0A2463;margin:0 0 8px 0;font-weight:600;">医疗与自动驾驶AI应用成熟度对比</h4>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <div style="flex:1;">
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#4A4A4A;margin-bottom:3px;">医疗健康</div>
+            <div style="background:#E0E0E0;height:14px;position:relative;">
+              <div style="background:#0A2463;height:100%;width:72%;"></div>
+            </div>
+            <div style="font-family:Arial,sans-serif;font-size:8px;color:#9E9E9E;text-align:right;">成熟度 72%</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <div style="flex:1;">
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#4A4A4A;margin-bottom:3px;">自动驾驶</div>
+            <div style="background:#E0E0E0;height:14px;position:relative;">
+              <div style="background:#0A2463;height:100%;width:58%;"></div>
+            </div>
+            <div style="font-family:Arial,sans-serif;font-size:8px;color:#9E9E9E;text-align:right;">成熟度 58%</div>
+          </div>
+        </div>
+        <div style="border-top:1px solid #E0E0E0;padding-top:6px;margin-top:4px;">
+          <div style="display:flex;justify-content:space-between;font-family:Arial,sans-serif;font-size:9px;">
+            <span style="color:#4A4A4A;">商业化程度</span>
+            <span style="color:#0A2463;font-weight:600;">医疗 > 自动驾驶</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:Arial,sans-serif;font-size:9px;margin-top:3px;">
+            <span style="color:#4A4A4A;">监管复杂度</span>
+            <span style="color:#0A2463;font-weight:600;">医疗 > 自动驾驶</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:Arial,sans-serif;font-size:9px;margin-top:3px;">
+            <span style="color:#4A4A4A;">技术风险等级</span>
+            <span style="color:#0A2463;font-weight:600;">自动驾驶 > 医疗</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二栏：自动驾驶案例 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="border:1px solid #E0E0E0;border-left:3px solid #0A2463;padding:10px 12px;">
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0 0 6px 0;font-weight:600;">自动驾驶AI应用</h3>
+        <p style="font-family:Arial,sans-serif;font-size:10.5px;color:#4A4A4A;line-height:1.5;margin:0 0 8px 0;">
+          L2-L4级自动驾驶逐步商业化，感知与决策算法持续迭代，但安全冗余与法规框架仍待完善
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:#F5F7FA;padding:6px 8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:16px;color:#0A2463;font-weight:700;">[Data: XX]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">试点城市数量</div>
+          </div>
+          <div style="background:#F5F7FA;padding:6px 8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:16px;color:#0A2463;font-weight:700;">L[Data: XX]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">最高落地等级</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 挑战区块 -->
+      <div style="border:1px solid #E0E0E0;border-left:3px solid #0A2463;padding:10px 12px;flex:1;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:12px;color:#0A2463;margin:0 0 8px 0;font-weight:600;">核心挑战分析</h4>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="display:flex;align-items:flex-start;gap:6px;">
+            <iconify-icon icon="mdi:alert-circle" style="font-size:12px;color:#0A2463;flex-shrink:0;margin-top:1px;"></iconify-icon>
+            <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.4;">监管审批：医疗AI三类器械审批周期 [Data: XX] 个月，自动驾驶路测牌照获取效率待提升</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:6px;">
+            <iconify-icon icon="mdi:alert-circle" style="font-size:12px;color:#0A2463;flex-shrink:0;margin-top:1px;"></iconify-icon>
+            <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.4;">数据隐私：患者医疗数据与行车数据的合规使用、跨境传输存在法律灰色地带</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:6px;">
+            <iconify-icon icon="mdi:alert-circle" style="font-size:12px;color:#0A2463;flex-shrink:0;margin-top:1px;"></iconify-icon>
+            <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.4;">技术可靠性：极端场景下的算法泛化能力、长尾故障应对机制需持续验证</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:6px;">
+            <iconify-icon icon="mdi:alert-circle" style="font-size:12px;color:#0A2463;flex-shrink:0;margin-top:1px;"></iconify-icon>
+            <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.4;">伦理责任：事故归责、保险理赔、算法歧视等社会伦理框架尚未成熟</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第三栏：机会窗口（2x2矩阵） -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="border:1px solid #E0E0E0;padding:10px 12px;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:12px;color:#0A2463;margin:0 0 8px 0;font-weight:600;">机会窗口矩阵</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+          <div style="background:#F5F7FA;padding:8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;margin-bottom:3px;">高价值机会</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#4A4A4A;line-height:1.4;">AI辅助诊断（影像）、药物研发加速、远程医疗</div>
+          </div>
+          <div style="background:#F5F7FA;padding:8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;margin-bottom:3px;">快速增长机会</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#4A4A4A;line-height:1.4;">Robotaxi商业化、特定场景自动驾驶（港口/矿区）</div>
+          </div>
+          <div style="background:#F5F7FA;padding:8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;margin-bottom:3px;">潜力赛道</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#4A4A4A;line-height:1.4;">AI手术机器人、数字疗法、健康管理平台</div>
+          </div>
+          <div style="background:#F5F7FA;padding:8px;border:1px solid #E0E0E0;">
+            <div style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;margin-bottom:3px;">新兴领域</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#4A4A4A;line-height:1.4;">V2X车路协同、L4级无人配送车</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 关键数据行 -->
+      <div style="border:1px solid #E0E0E0;padding:10px 12px;">
+        <h4 style="font-family:'Times New Roman',serif;font-size:12px;color:#0A2463;margin:0 0 8px 0;font-weight:600;">关键数据指标</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div style="text-align:center;border:1px solid #E0E0E0;padding:6px;">
+            <div style="font-family:Arial,sans-serif;font-size:18px;color:#0A2463;font-weight:700;">[Data: XX%]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">年复合增长率</div>
+          </div>
+          <div style="text-align:center;border:1px solid #E0E0E0;padding:6px;">
+            <div style="font-family:Arial,sans-serif;font-size:18px;color:#0A2463;font-weight:700;">[Data: XX%]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">监管审批通过率</div>
+          </div>
+          <div style="text-align:center;border:1px solid #E0E0E0;padding:6px;">
+            <div style="font-family:Arial,sans-serif;font-size:18px;color:#0A2463;font-weight:700;">[Data: XX]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">亿元市场规模</div>
+          </div>
+          <div style="text-align:center;border:1px solid #E0E0E0;padding:6px;">
+            <div style="font-family:Arial,sans-serif;font-size:18px;color:#0A2463;font-weight:700;">[Data: XX%]</div>
+            <div style="font-family:Arial,sans-serif;font-size:9px;color:#9E9E9E;">技术达标率</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部行动要点 -->
+      <div style="border:1px solid #E0E0E0;border-left:3px solid #0A2463;padding:8px 10px;background:#F8F9FA;">
+        <div style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;line-height:1.5;">
+          <strong style="color:#0A2463;">行动要点：</strong>优先布局监管路径清晰的医疗AI辅助诊断赛道，同步关注特定封闭场景自动驾驶的商业化突破
+        </div>
+      </div>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p08" class="deck-page" style="background:#FFFFFF;color:#000000;width:100%;height:100%;padding:28px 32px;display:flex;flex-direction:column;gap:18px;overflow:hidden; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+    <div>
+      <h1 style="margin:0;font-size:30px;line-height:1.2;font-weight:800;color:#000000;">全球市场格局</h1>
+      <p style="margin:8px 0 0;font-size:13px;line-height:1.7;color:#000000;opacity:0.7;max-width:900px;">呈现全球AI市场投资趋势与竞争格局</p>
+    </div>
+    <div style="padding:8px 12px;border-radius:999px;background:rgba(10,36,99,0.12);border:1px solid rgba(10,36,99,0.24);font-size:12px;color:#0A2463;white-space:nowrap;">统一 ROI 与回收期口径</div>
+  </div>
+  <div class="deck-finance-summary" style="display:flex;flex-direction:column;gap:16px;margin-bottom:20px;">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;">
+    <div>
+      <div style="font-size:15px;font-weight:700;color:#000000;">投资回报结论</div>
+      <div style="margin-top:6px;font-size:13px;line-height:1.7;color:#000000;max-width:720px;">在统一业务量口径下，AI 客服改造的一次性投入为 900 万元，首年综合回报 900 万元，可在第 12 个月收回投资；随着模型优化与业务转化提升，3 年累计回报提升至 2880 万元，对应累计 ROI 320%。</div>
+    </div>
+    <div style="padding:10px 14px;border-radius:999px;background:rgba(10,36,99,0.12);border:1px solid rgba(10,36,99,0.25);font-size:12px;color:#0A2463;white-space:nowrap;">基于年业务量 100 万次咨询、统一业务口径测算</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+    <div style="padding:16px 18px;border-radius:16px;background:rgba(255,255,255,0.72);border:1px solid rgba(10,36,99,0.16);">
+      <div style="font-size:12px;color:#94a3b8;">投资回收期</div>
+      <div style="margin-top:8px;font-size:28px;font-weight:800;color:#000000;">12 个月</div>
+      <div style="margin-top:6px;font-size:12px;color:#0A2463;">月均综合回报约 75.0 万元</div>
+    </div>
+    <div style="padding:16px 18px;border-radius:16px;background:rgba(255,255,255,0.72);border:1px solid rgba(10,36,99,0.16);">
+      <div style="font-size:12px;color:#94a3b8;">首年综合回报</div>
+      <div style="margin-top:8px;font-size:28px;font-weight:800;color:#000000;">900 万元</div>
+      <div style="margin-top:6px;font-size:12px;color:#0A2463;">成本节省 720 万元 + 增收 180 万元</div>
+    </div>
+    <div style="padding:16px 18px;border-radius:16px;background:rgba(255,255,255,0.72);border:1px solid rgba(10,36,99,0.16);">
+      <div style="font-size:12px;color:#94a3b8;">3 年累计 ROI</div>
+      <div style="margin-top:8px;font-size:28px;font-weight:800;color:#000000;">320%</div>
+      <div style="margin-top:6px;font-size:12px;color:#0A2463;">3 年累计回报 2880 万元，净增益 1980 万元</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,0.8);border:1px solid rgba(148,163,184,0.16);font-size:12px;color:#000000;line-height:1.6;">
+    <span style="font-weight:700;color:#000000;">关键假设</span>
+    <span>一次性建设投入 900 万元</span>
+    <span>首年成本节省 720 万元</span>
+    <span>首年增收与留存收益 180 万元</span>
+    <span>3 年累计 ROI = 3 年累计回报 / 初始投入 × 100%</span>
+    <span>全部页面采用相同口径，避免 ROI、回收期与回报口径冲突</span>
+  </div>
+</div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;flex:1;min-height:0;align-items:stretch;">
+    <div style="min-width:0;"><div class="deck-visual-wrapper deck-chart-wrapper" style="display:flex;flex-direction:column;gap:12px;padding:18px 20px;border-radius:18px;background:rgba(255,255,255,0.78);border:1px solid rgba(10,36,99,0.14);min-height:320px;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+    <div>
+      <div style="font-size:15px;font-weight:700;color:#000000;">全球AI市场预计保持20%以上年复合增长率，2028年市场规模将突破万亿美元</div>
+      <div style="margin-top:4px;font-size:12px;color:#94a3b8;">保持同一业务量口径，对比三类核心成本。年度节省合计 720 万元。</div>
+    </div>
+    <div style="padding:6px 10px;border-radius:999px;background:rgba(10,36,99,0.12);font-size:12px;color:#0A2463;white-space:nowrap;">节省比例：人工与外包 -71.8% / 系统与工具 -31.8% / 质检与管理 -50.0%</div>
+  </div>
+  <div id="p08_chart_1" style="width:100%;height:260px;"></div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#000000;line-height:1.6;">
+    <span>全球AI市场预计保持20%以上年复合增长率，2028年市场规模将突破万亿美元</span>
+    <span>传统方案总成本 1180 万元/年</span>
+    <span>AI 方案总成本 460 万元/年</span>
+    <span>成本节省 720 万元/年</span>
+  </div>
+  
+  <script type="application/webdeck-chart-init">(function(){const el=document.getElementById("p08_chart_1");if(!el||typeof echarts==='undefined') return;const chart=echarts.init(el);chart.setOption({"backgroundColor": "transparent", "legend": {"top": 0, "textStyle": {"color": "#000000"}, "data": ["传统方案", "AI方案"]}, "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}}, "grid": {"left": 56, "right": 24, "top": 48, "bottom": 44}, "xAxis": {"type": "category", "name": "成本类型", "data": ["人工与外包", "系统与工具", "质检与管理"], "axisLabel": {"color": "#94a3b8"}, "axisLine": {"lineStyle": {"color": "#475569"}}}, "yAxis": {"type": "value", "name": "万元/年", "axisLabel": {"color": "#94a3b8"}, "axisLine": {"lineStyle": {"color": "#475569"}}, "splitLine": {"lineStyle": {"color": "rgba(148,163,184,0.12)"}}}, "series": [{"name": "传统方案", "type": "bar", "barMaxWidth": 28, "itemStyle": {"color": "#64748b", "borderRadius": [8, 8, 0, 0]}, "label": {"show": true, "position": "top", "color": "#000000"}, "data": [780, 220, 180]}, {"name": "AI方案", "type": "bar", "barMaxWidth": 28, "itemStyle": {"color": "#0A2463", "borderRadius": [8, 8, 0, 0]}, "data": [{"value": 220, "label": {"show": true, "position": "top", "color": "#0A2463", "formatter": "220\\n↓71.8%"}}, {"value": 150, "label": {"show": true, "position": "top", "color": "#0A2463", "formatter": "150\\n↓31.8%"}}, {"value": 90, "label": {"show": true, "position": "top", "color": "#0A2463", "formatter": "90\\n↓50.0%"}}]}]});window.addEventListener('resize',()=>chart.resize());})();</script>
+</div></div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p09" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:36px 48px;box-sizing:border-box;overflow:hidden;font-family:Arial,Roboto,sans-serif; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  
+  <!-- So What 行动标题 -->
+  <h1 style="font-family:'Times New Roman','Garamond',Georgia,serif;font-size:22px;color:#000000;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    AI技术广泛应用带来数据隐私、算法偏见、深度伪造与AGI安全等多维挑战，亟需建立系统性治理框架
+  </h1>
+  <p style="font-family:Arial,sans-serif;font-size:11px;color:#9E9E9E;margin:0 0 12px 0;">
+    覆盖技术风险、伦理困境与治理路径的综合分析 · 2024-2025
+  </p>
+  <div style="width:50px;height:3px;background:#0A2463;margin-bottom:16px;"></div>
+
+  <!-- 主内容区：三栏布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;height:calc(100% - 85px);">
+
+    <!-- 左栏：风险分类 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <h2 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;font-weight:700;margin:0 0 6px 0;border-left:3px solid #0A2463;padding-left:8px;">
+        安全风险分类
+      </h2>
+      
+      <!-- 风险卡片1：数据隐私 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 12px;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+          <iconify-icon icon="mdi:shield-lock" style="font-size:16px;color:#0A2463;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#000000;font-weight:700;margin:0;">数据隐私泄露</h3>
+        </div>
+        <p style="font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+          AI模型训练依赖海量数据，个人敏感信息、企业商业机密面临被提取和滥用的风险。隐私保护技术（联邦学习、差分隐私）成为关键防线。
+        </p>
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E0E0E0;">
+          <span style="font-size:9px;color:#9E9E9E;">风险等级：</span>
+          <span style="font-size:9px;color:#0A2463;font-weight:600;">[Data: XX%] 企业存在数据泄露隐患</span>
+        </div>
+      </div>
+
+      <!-- 风险卡片2：算法偏见 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 12px;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+          <iconify-icon icon="mdi:scale-balance" style="font-size:16px;color:#0A2463;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#000000;font-weight:700;margin:0;">算法偏见与歧视</h3>
+        </div>
+        <p style="font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+          训练数据中的历史偏见被模型学习并放大，导致招聘、信贷、司法等领域的系统性歧视。偏见检测与公平性约束技术仍在探索阶段。
+        </p>
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E0E0E0;">
+          <span style="font-size:9px;color:#9E9E9E;">风险等级：</span>
+          <span style="font-size:9px;color:#0A2463;font-weight:600;">[Data: XX%] 主流模型存在可检测偏见</span>
+        </div>
+      </div>
+
+      <!-- 风险卡片3：深度伪造 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 12px;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+          <iconify-icon icon="mdi:face-recognition" style="font-size:16px;color:#0A2463;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#000000;font-weight:700;margin:0;">深度伪造滥用</h3>
+        </div>
+        <p style="font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+          生成式AI可合成逼真图像、视频、音频，被用于虚假信息传播、诈骗、舆论操纵等。2024年深度伪造相关欺诈案件涉案金额超[Data: XX]亿美元。
+        </p>
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E0E0E0;">
+          <span style="font-size:9px;color:#9E9E9E;">风险等级：</span>
+          <span style="font-size:9px;color:#0A2463;font-weight:600;">[Data: XX%] 年增长率</span>
+        </div>
+      </div>
+
+      <!-- 风险卡片4：AGI安全 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 12px;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+          <iconify-icon icon="mdi:brain" style="font-size:16px;color:#0A2463;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:13px;color:#000000;font-weight:700;margin:0;">AGI安全威胁</h3>
+        </div>
+        <p style="font-size:10px;color:#4A4A4A;line-height:1.5;margin:0;">
+          通用人工智能的潜在能力超越人类控制可能，引发目标对齐、价值对齐等根本性挑战。AI安全研究需在能力超越人类前取得突破性进展。
+        </p>
+        <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E0E0E0;">
+          <span style="font-size:9px;color:#9E9E9E;">风险等级：</span>
+          <span style="font-size:9px;color:#0A2463;font-weight:600;">长期战略风险</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 中栏：治理框架可视化 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <h2 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;font-weight:700;margin:0 0 6px 0;border-left:3px solid #0A2463;padding-left:8px;">
+        AI治理框架
+      </h2>
+      
+      <!-- 治理框架三层结构图 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:12px;flex:1;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:#0A2463;color:#FFFFFF;padding:10px 12px;border-radius:4px;text-align:center;">
+          <div style="font-family:'Times New Roman',serif;font-size:12px;font-weight:700;margin-bottom:4px;">法规层</div>
+          <div style="font-size:9px;opacity:0.9;">法律法规 · 国际公约 · 行业标准</div>
+        </div>
+        <div style="background:#1a4a8a;color:#FFFFFF;padding:10px 12px;border-radius:4px;text-align:center;">
+          <div style="font-family:'Times New Roman',serif;font-size:12px;font-weight:700;margin-bottom:4px;">制度层</div>
+          <div style="font-size:9px;opacity:0.9;">伦理委员会 · 审计机制 · 问责制度</div>
+        </div>
+        <div style="background:#2d5a9e;color:#FFFFFF;padding:10px 12px;border-radius:4px;text-align:center;">
+          <div style="font-family:'Times New Roman',serif;font-size:12px;font-weight:700;margin-bottom:4px;">技术层</div>
+          <div style="font-size:9px;opacity:0.9;">安全测试 · 偏见检测 · 可解释AI</div>
+        </div>
+        
+        <!-- 伦理原则表格 -->
+        <div style="margin-top:8px;flex:1;">
+          <div style="font-size:11px;font-weight:700;color:#0A2463;margin-bottom:6px;">核心伦理原则</div>
+          <table style="width:100%;border-collapse:collapse;font-size:10px;">
+            <tr>
+              <th style="border-bottom:1px solid #E0E0E0;padding:4px 6px;text-align:left;color:#9E9E9E;font-weight:600;">原则</th>
+              <th style="border-bottom:1px solid #E0E0E0;padding:4px 6px;text-align:left;color:#9E9E9E;font-weight:600;">内涵</th>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;color:#000000;border-bottom:1px solid #E0E0E0;">公平性</td>
+              <td style="padding:4px 6px;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">避免歧视，平等对待</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;color:#000000;border-bottom:1px solid #E0E0E0;">透明性</td>
+              <td style="padding:4px 6px;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">决策可解释，结果可溯</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;color:#000000;border-bottom:1px solid #E0E0E0;">可控性</td>
+              <td style="padding:4px 6px;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">人类监督，行为可预测</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 6px;color:#000000;">安全性</td>
+              <td style="padding:4px 6px;color:#4A4A4A;">数据保护，风险最小化</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右栏：行动建议 -->
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <h2 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;font-weight:700;margin:0 0 6px 0;border-left:3px solid #0A2463;padding-left:8px;">
+        行动建议
+      </h2>
+      
+      <!-- 企业层面 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 12px;border-left:4px solid #0A2463;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <iconify-icon icon="mdi:domain" style="font-size:14px;color:#0A2463;"></iconify-icon>
+          <span style="font-size:11px;font-weight:700;color:#0A2463;">企业层面</span>
+        </div>
+        <ul style="margin:0;padding-left:14px;font-size:10px;color:#4A4A4A;line-height:1.6;">
+          <li>建立AI伦理审查委员会</li>
+          <li>实施数据分类分级管理</li>
+          <li>部署模型偏见检测工具</li>
+          <li>制定AI使用内部规范</li>
+          <li>定期开展安全评估审计</li>
+        </ul>
+      </div>
+
+      <!-- 行业层面 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 12px;border-left:4px solid #4A4A4A;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <iconify-icon icon="mdi:account-group" style="font-size:14px;color:#4A4A4A;"></iconify-icon>
+          <span style="font-size:11px;font-weight:700;color:#4A4A4A;">行业层面</span>
+        </div>
+        <ul style="margin:0;padding-left:14px;font-size:10px;color:#4A4A4A;line-height:1.6;">
+          <li>制定行业自律公约</li>
+          <li>建立跨企业信息共享机制</li>
+          <li>推动最佳实践标准制定</li>
+          <li>开展联合安全研究</li>
+          <li>建立行业黑名单制度</li>
+        </ul>
+      </div>
+
+      <!-- 政府层面 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:10px 12px;border-left:4px solid #9E9E9E;flex:1;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <iconify-icon icon="mdi:bank" style="font-size:14px;color:#9E9E9E;"></iconify-icon>
+          <span style="font-size:11px;font-weight:700;color:#9E9E9E;">政府层面</span>
+        </div>
+        <ul style="margin:0;padding-left:14px;font-size:10px;color:#4A4A4A;line-height:1.6;">
+          <li>完善AI立法与监管框架</li>
+          <li>设立专项监管机构</li>
+          <li>推动国际治理合作</li>
+          <li>加大安全研究投入</li>
+          <li>建立AI安全应急响应体系</li>
+        </ul>
+      </div>
+
+      <!-- 关键结论 -->
+      <div style="background:#0A2463;color:#FFFFFF;padding:10px 12px;border-radius:4px;margin-top:auto;">
+        <div style="font-size:10px;font-weight:700;margin-bottom:4px;">关键结论</div>
+        <div style="font-size:9px;line-height:1.5;opacity:0.95;">
+          构建"法规-制度-技术"三位一体治理体系，实现AI发展与安全可控的平衡
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p10" class="deck-page" style="width: 100%; min-height: 100vh; background: #FFFFFF; font-family: Arial, Roboto, 'Helvetica Neue', sans-serif; color: #000000; padding: 0; margin: 0; box-sizing: border-box; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <div style="display: flex; flex-direction: column; padding: 24px 32px; height: 100vh; box-sizing: border-box;">
+    <!-- 顶部标题区 -->
+    <div style="margin-bottom: 16px;">
+      <h1 style="font-family: 'Times New Roman', Garamond, Georgia, serif; font-size: 26px; font-weight: bold; color: #0A2463; margin: 0 0 8px 0; line-height: 1.3;">未来三年AI将从"预测下一个词"转向"预测世界状态"，投资应聚焦Agent智能体与世界模型</h1>
+      <p style="font-family: Arial, sans-serif; font-size: 13px; color: #4A4A4A; margin: 0; line-height: 1.5;">技术范式迁移正在重塑AI产业格局：生成式AI的"词预测"模式将逐步让位于"世界模型"的状态预测，这一转变将催生Agent智能体、具身智能等新范式，重新定义人机协作边界。</p>
+    </div>
+
+    <!-- 主要内容区：左侧叙事 + 右侧视觉 -->
+    <div style="display: flex; flex: 1; gap: 20px; min-height: 0;">
+      <!-- 左侧叙事内容 -->
+      <div style="flex: 0 0 320px; display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
+        <!-- trend_block -->
+        <div class="trend_block" style="padding: 10px 14px; background: #F8F9FA; border-left: 3px solid #0A2463; flex-shrink: 0;">
+          <h3 style="font-family: 'Times New Roman', Georgia, serif; color: #0A2463; font-size: 13px; margin: 0 0 4px 0;">技术范式演进趋势</h3>
+          <p style="font-family: Arial, sans-serif; font-size: 11px; color: #4A4A4A; margin: 0; line-height: 1.5;">当前主流的"下一个词预测"范式正面临向"世界模型预测"的范式转移。世界模型通过构建环境内部表征，实现对未来状态的主动预测与推理。</p>
+        </div>
+
+        <!-- timeline_block -->
+        <div class="timeline_block" style="flex-shrink: 0; overflow: hidden;">
+          <h3 style="font-family: 'Times New Roman', Georgia, serif; color: #0A2463; font-size: 13px; margin: 0 0 6px 0;">2025-2027 技术演进时间轴</h3>
+          <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 10px;">
+            <thead>
+              <tr style="background: #0A2463; color: #FFFFFF;">
+                <th style="padding: 6px 8px; text-align: left; border-bottom: 2px solid #0A2463; font-size: 10px;">时间节点</th>
+                <th style="padding: 6px 8px; text-align: left; border-bottom: 2px solid #0A2463; font-size: 10px;">技术方向</th>
+                <th style="padding: 6px 8px; text-align: left; border-bottom: 2px solid #0A2463; font-size: 10px;">成熟度</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #E0E0E0;">
+                <td style="padding: 5px 8px; font-weight: bold; color: #0A2463; font-size: 10px;">2025 Q1-Q2</td>
+                <td style="padding: 5px 8px; font-size: 10px;">Agent规模化落地</td>
+                <td style="padding: 5px 8px; font-size: 10px;">[Data: XX%]</td>
+              </tr>
+              <tr style="background: #F8F9FA; border-bottom: 1px solid #E0E0E0;">
+                <td style="padding: 5px 8px; font-weight: bold; color: #0A2463; font-size: 10px;">2025 Q3-Q4</td>
+                <td style="padding: 5px 8px; font-size: 10px;">多模态世界模型</td>
+                <td style="padding: 5px 8px; font-size: 10px;">[Data: XX%]</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #E0E0E0;">
+                <td style="padding: 5px 8px; font-weight: bold; color: #0A2463; font-size: 10px;">2026</td>
+                <td style="padding: 5px 8px; font-size: 10px;">具身智能商业化</td>
+                <td style="padding: 5px 8px; font-size: 10px;">[Data: XX%]</td>
+              </tr>
+              <tr style="background: #F8F9FA; border-bottom: 1px solid #E0E0E0;">
+                <td style="padding: 5px 8px; font-weight: bold; color: #0A2463; font-size: 10px;">2027</td>
+                <td style="padding: 5px 8px; font-size: 10px;">AGI关键里程碑</td>
+                <td style="padding: 5px 8px; font-size: 10px;">[Data: XX%]</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- prediction_block -->
+        <div class="prediction_block" style="padding: 10px 14px; background: linear-gradient(135deg, #0A2463 0%, #1a3d7a 100%); border-radius: 4px; flex-shrink: 0;">
+          <h3 style="font-family: 'Times New Roman', Georgia, serif; color: #FFFFFF; font-size: 13px; margin: 0 0 4px 0;">核心预测</h3>
+          <p style="font-family: Arial, sans-serif; font-size: 11px; color: #E0E0E0; margin: 0; line-height: 1.5;">2027年前，端到端Agent将成为企业AI部署主流形态，具备自主规划、工具调用、多步骤推理能力的智能体将替代传统API调用模式。</p>
+        </div>
+
+        <!-- 4个point cards -->
+        <div class="deck-points-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; flex: 1; min-height: 0;">
+          <div class="deck-point-card" style="border: 1px solid #E0E0E0; padding: 8px; background: #FFFFFF; overflow: hidden;">
+            <h3 style="font-family: 'Times New Roman', Georgia, serif; color: #0A2463; font-size: 11px; margin: 0 0 4px 0;">Agent智能体</h3>
+            <p style="font-family: Arial, sans-serif; font-size: 9px; color: #4A4A4A; margin: 0; line-height: 1.4;">具备自主规划、工具使用、多智能体协作能力。预计2025年企业渗透率达[Data: XX%]。</p>
+          </div>
+          <div class="deck-point-card" style="border: 1px solid #E0E0E0; padding: 8px; background: #FFFFFF; overflow: hidden;">
+            <h3 style="font-family: 'Times New Roman', Georgia, serif; color: #0A2463; font-size: 11px; margin: 0 0 4px 0;">世界模型</h3>
+            <p style="font-family: Arial, sans-serif; font-size: 9px; color: #4A4A4A; margin: 0; line-height: 1.4;">构建环境内部表征，实现对未来状态的主动预测与推理，超越"词预测"范式。</p>
+          </div>
+          <div class="deck-point-card" style="border: 1px solid #E0E0E0; padding: 8px; background: #FFFFFF; overflow: hidden;">
+            <h3 style="font-family: 'Times New Roman', Georgia, serif; color: #0A2463; font-size: 11px; margin: 0 0 4px 0;">具身智能</h3>
+            <p style="font-family: Arial, sans-serif; font-size: 9px; color: #4A4A4A; margin: 0; line-height: 1.4;">AI与物理世界交互，包括人形机器人、自动驾驶。预计2026年商业化拐点。</p>
+          </div>
+          <div class="deck-point-card" style="border: 1px solid #E0E0E0; padding: 8px; background: #FFFFFF; overflow: hidden;">
+            <h3 style="font-family: 'Times New Roman', Georgia, serif; color: #0A2463; font-size: 11px; margin: 0 0 4px 0;">AGI演进路径</h3>
+            <p style="font-family: Arial, sans-serif; font-size: 9px; color: #4A4A4A; margin: 0; line-height: 1.4;">从窄域专用到多域泛化，需突破常识推理、因果学习等核心技术瓶颈。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧视觉：SVG时间轴图 -->
+      <div class="deck-visual-wrapper" style="flex: 1; min-width: 0;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <filter id="shadow_s" x="-5%" y="-5%" width="110%" height="110%">
+              <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0A2463" flood-opacity="0.1"/>
+            </filter>
+            <linearGradient id="timelineGrad_s" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#0A2463;stop-opacity:0.6"/>
+              <stop offset="50%" style="stop-color:#0A2463;stop-opacity:1"/>
+              <stop offset="100%" style="stop-color:#0A2463;stop-opacity:0.6"/>
+            </linearGradient>
+          </defs>
+          
+          <!-- 标题 -->
+          <text x="300" y="28" text-anchor="middle" font-family="Times New Roman, serif" font-size="16" font-weight="bold" fill="#0A2463">2024-2027年AI技术发展趋势路线图</text>
+          
+          <!-- 时间轴主轴 -->
+          <line x1="40" y1="340" x2="560" y2="340" stroke="url(#timelineGrad_s)" stroke-width="3" stroke-linecap="round"/>
+          
+          <!-- 时间刻度 -->
+          <line x1="80" y1="332" x2="80" y2="348" stroke="#0A2463" stroke-width="2"/>
+          <text x="80" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#0A2463">2024</text>
+          <text x="80" y="378" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#9E9E9E">基础布局</text>
+          
+          <line x1="190" y1="332" x2="190" y2="348" stroke="#0A2463" stroke-width="2"/>
+          <text x="190" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#0A2463">2025</text>
+          <text x="190" y="378" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#9E9E9E">规模应用</text>
+          
+          <line x1="310" y1="332" x2="310" y2="348" stroke="#0A2463" stroke-width="2"/>
+          <text x="310" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#0A2463">2026</text>
+          <text x="310" y="378" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#9E9E9E">深度融合</text>
+          
+          <line x1="440" y1="332" x2="440" y2="348" stroke="#0A2463" stroke-width="2"/>
+          <text x="440" y="365" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#0A2463">2027</text>
+          <text x="440" y="378" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#9E9E9E">成熟生态</text>
+          
+          <!-- 阶段区域 -->
+          <rect x="40" y="50" width="130" height="260" fill="#0A2463" fill-opacity="0.03" rx="4"/>
+          <rect x="170" y="50" width="140" height="260" fill="#0A2463" fill-opacity="0.05" rx="4"/>
+          <rect x="310" y="50" width="130" height="260" fill="#0A2463" fill-opacity="0.07" rx="4"/>
+          <rect x="440" y="50" width="130" height="260" fill="#0A2463" fill-opacity="0.05" rx="4"/>
+          
+          <!-- 技术卡片 - 2024 -->
+          <g filter="url(#shadow_s)">
+            <rect x="50" y="55" width="110" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <circle cx="65" cy="75" r="8" fill="#0A2463"/>
+            <text x="65" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF" font-weight="bold">A</text>
+            <text x="80" y="70" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#0A2463">Agent</text>
+            <text x="80" y="82" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">规划推理</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="50" y="100" width="110" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <circle cx="65" cy="120" r="8" fill="#0A2463"/>
+            <text x="65" y="123" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF" font-weight="bold">W</text>
+            <text x="80" y="115" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#0A2463">世界模型</text>
+            <text x="80" y="127" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">状态预测</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="50" y="145" width="110" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <circle cx="65" cy="165" r="8" fill="#9E9E9E"/>
+            <text x="65" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF" font-weight="bold">M</text>
+            <text x="80" y="160" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#4A4A4A">多模态</text>
+            <text x="80" y="172" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">融合理解</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="50" y="190" width="110" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <circle cx="65" cy="210" r="8" fill="#9E9E9E"/>
+            <text x="65" y="213" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF" font-weight="bold">E</text>
+            <text x="80" y="205" font-family="Arial, sans-serif" font-size="9" font-weight="bold" fill="#4A4A4A">具身智能</text>
+            <text x="80" y="217" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">机器人</text>
+          </g>
+          
+          <!-- 里程碑 -->
+          <circle cx="80" cy="340" r="5" fill="#0A2463"/>
+          
+          <!-- 技术卡片 - 2025 -->
+          <g filter="url(#shadow_s)">
+            <rect x="180" y="55" width="120" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <text x="195" y="68" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#0A2463">LLM + Agent</text>
+            <text x="195" y="80" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">自主任务执行</text>
+            <text x="195" y="90" font-family="Arial, sans-serif" font-size="6" fill="#9E9E9E">[Data: XX%]</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="180" y="100" width="120" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <text x="195" y="113" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#0A2463">世界模型兴起</text>
+            <text x="195" y="125" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">空间智能</text>
+            <text x="195" y="135" font-family="Arial, sans-serif" font-size="6" fill="#9E9E9E">[Data: XX%]</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="180" y="145" width="120" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <text x="195" y="158" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#4A4A4A">视频生成爆发</text>
+            <text x="195" y="170" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">Sora/可灵</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="180" y="190" width="120" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <text x="195" y="203" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#4A4A4A">端到端自动驾驶</text>
+            <text x="195" y="215" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">Waymo/FSD</text>
+          </g>
+          
+          <circle cx="190" cy="340" r="5" fill="#0A2463"/>
+          
+          <!-- 技术卡片 - 2026 -->
+          <g filter="url(#shadow_s)">
+            <rect x="320" y="55" width="110" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <text x="335" y="68" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#0A2463">Agent生态成熟</text>
+            <text x="335" y="80" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">MCP标准化</text>
+            <text x="335" y="90" font-family="Arial, sans-serif" font-size="6" fill="#9E9E9E">[Data: XX%]</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="320" y="100" width="110" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <text x="335" y="113" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#0A2463">世界模型商用</text>
+            <text x="335" y="125" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">数字孪生</text>
+            <text x="335" y="135" font-family="Arial, sans-serif" font-size="6" fill="#9E9E9E">[Data: XX%]</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="320" y="145" width="110" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <text x="335" y="158" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#4A4A4A">实时多模态</text>
+            <text x="335" y="170" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">GPT-4o式</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="320" y="190" width="110" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <text x="335" y="203" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#4A4A4A">人形机器人</text>
+            <text x="335" y="215" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">Optimus</text>
+          </g>
+          
+          <circle cx="310" cy="340" r="5" fill="#0A2463"/>
+          
+          <!-- 技术卡片 - 2027 -->
+          <g filter="url(#shadow_s)">
+            <rect x="450" y="55" width="110" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <text x="465" y="68" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#0A2463">AI原生应用</text>
+            <text x="465" y="80" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">通用Agent</text>
+            <text x="465" y="90" font-family="Arial, sans-serif" font-size="6" fill="#9E9E9E">[Data: XX%]</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="450" y="100" width="110" height="40" fill="#FFFFFF" stroke="#0A2463" stroke-width="1.5" rx="4"/>
+            <text x="465" y="113" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#0A2463">物理AI突破</text>
+            <text x="465" y="125" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">AGI路径</text>
+            <text x="465" y="135" font-family="Arial, sans-serif" font-size="6" fill="#9E9E9E">[Data: XX%]</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="450" y="145" width="110" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <text x="465" y="158" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#4A4A4A">全场景智能</text>
+            <text x="465" y="170" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">工作/生活</text>
+          </g>
+          
+          <g filter="url(#shadow_s)">
+            <rect x="450" y="190" width="110" height="40" fill="#FFFFFF" stroke="#9E9E9E" stroke-width="1" rx="4"/>
+            <text x="465" y="203" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#4A4A4A">L4/L5自动驾驶</text>
+            <text x="465" y="215" font-family="Arial, sans-serif" font-size="7" fill="#9E9E9E">Robotaxi</text>
+          </g>
+          
+          <circle cx="440" cy="340" r="5" fill="#0A2463"/>
+          
+          <!-- 图例 -->
+          <g transform="translate(40, 395)">
+            <rect x="0" y="0" width="10" height="10" fill="#0A2463" rx="2"/>
+            <text x="14" y="8" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">核心投资</text>
+            
+            <rect x="65" y="0" width="10" height="10" fill="#9E9E9E" rx="2"/>
+            <text x="79" y="8" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">辅助方向</text>
+            
+            <circle cx="130" cy="5" r="4" fill="#0A2463"/>
+            <text x="138" y="8" font-family="Arial, sans-serif" font-size="7" fill="#4A4A4A">里程碑</text>
+          </g>
+          
+          <!-- So What结论 -->
+          <g>
+            <rect x="320" y="395" width="270" height="18" fill="#0A2463" fill-opacity="0.08" rx="3"/>
+            <text x="330" y="407" font-family: Arial, sans-serif; font-size: 8" fill="#0A2463" font-weight="bold">So What:</text>
+            <text x="365" y="407" font-family: Arial, sans-serif; font-size: 8" fill="#4A4A4A">2025-2027投资优先级: Agent > 世界模型 > 具身智能</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- 底部数据来源 -->
+    <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #E0E0E0;">
+      <p style="font-family: Arial, sans-serif; font-size: 9px; color: #9E9E9E; margin: 0;">数据来源: 对话分析 | research-2 | research-3 | [Data: XX%] 为待验证数据</p>
+    </div>
+  </div>
+</section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p11" class="deck-page deck-page--empty"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#000000;opacity:0.5;"><p>总结与建议</p></div></section></div></div>
+<div class="deck-slide"><div class="deck-stage"><section data-page-id="p12" class="deck-page" style="width:100%;height:100%;background:#FFFFFF;padding:40px 48px;box-sizing:border-box;overflow:hidden; background:#FFFFFF; color:#000000;"><style id="deck-theme-vars">:root{--accent:#0A2463;--bg:#FFFFFF;--text:#000000}section.deck-page{background:#FFFFFF!important;color:#000000!important}section.deck-page h1,section.deck-page h2,section.deck-page h3,section.deck-page h4{font-family:'Times New Roman', 'Garamond', Georgia, serif!important}section.deck-page p,section.deck-page li,section.deck-page td,section.deck-page span{font-family:Arial, Roboto, 'Helvetica Neue', sans-serif!important}</style>
+  <!-- So What 行动标题 -->
+  <h1 style="font-family:'Times New Roman',Garamond,Georgia,serif;font-size:24px;color:#000000;font-weight:700;margin:0 0 4px 0;line-height:1.3;">
+    本演示文稿数据来源于权威行业报告与公开研究，术语定义遵循国际通行标准
+  </h1>
+  <p style="font-family:Arial,Roboto,sans-serif;font-size:12px;color:#9E9E9E;margin:0 0 12px 0;">
+    数据截至 2024-2025年 · 来源标注见附录各区块
+  </p>
+  <div style="width:56px;height:3px;background:#0A2463;margin-bottom:18px;"></div>
+
+  <!-- 3栏高密度布局 -->
+  <div style="display:grid;grid-template-columns:1fr 1.2fr 0.9fr;gap:14px;height:calc(100% - 90px);">
+    
+    <!-- 第一栏：参考资料区块 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:book-open-page-variant" style="font-size:18px;color:#0A2463;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">参考资料</h3>
+      </div>
+      
+      <div style="flex:1;overflow:hidden;">
+        <p style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.5;margin:0 0 8px 0;font-weight:600;">核心文献来源</p>
+        <ul style="font-family:Arial,sans-serif;font-size:10.5px;color:#4A4A4A;line-height:1.6;margin:0;padding-left:14px;">
+          <li style="margin-bottom:6px;">McKinsey Global Institute · AI应用与商业价值报告 [Data: 2024]</li>
+          <li style="margin-bottom:6px;">Gartner · 人工智能技术成熟度曲线 [Data: 2024Q3]</li>
+          <li style="margin-bottom:6px;">Stanford HAI · AI指数年度报告 [Data: 2024]</li>
+          <li style="margin-bottom:6px;">IDC · 全球AI支出指南 [Data: 2024]</li>
+          <li style="margin-bottom:6px;">中国信通院 · 人工智能产业发展白皮书 [Data: 2024]</li>
+          <li style="margin-bottom:6px;">DeepMind / OpenAI · 技术论文与博客 [Data: 2024]</li>
+        </ul>
+        
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #E0E0E0;">
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#9E9E9E;margin:0;">对话分析来源标注</p>
+          <p style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;margin:4px 0 0 0;">基于多轮用户需求沟通提炼的关键洞察，数据来源标注为「对话分析」</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二栏：术语解释区块 -->
+    <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;margin-bottom:12px;">
+        <iconify-icon icon="mdi:translate" style="font-size:18px;color:#0A2463;margin-right:8px;"></iconify-icon>
+        <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">核心术语表</h3>
+      </div>
+      
+      <div style="flex:1;overflow-y:auto;">
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:10.5px;">
+          <tr>
+            <th style="border-bottom:1px solid #E0E0E0;padding:5px 0;text-align:left;color:#9E9E9E;font-weight:600;">术语</th>
+            <th style="border-bottom:1px solid #E0E0E0;padding:5px 0;text-align:left;color:#9E9E9E;font-weight:600;">定义</th>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#0A2463;font-weight:600;border-bottom:1px solid #E0E0E0;">LLM</td>
+            <td style="padding:5px 0;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">大语言模型（Large Language Model），基于Transformer架构的千亿参数级语言AI系统</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#0A2463;font-weight:600;border-bottom:1px solid #E0E0E0;">Agent</td>
+            <td style="padding:5px 0;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">智能体，具备规划、推理、工具调用能力，可自主完成复杂任务的AI系统</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#0A2463;font-weight:600;border-bottom:1px solid #E0E0E0;">多模态</td>
+            <td style="padding:5px 0;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">支持文本、图像、音频、视频等多种数据类型的处理与生成能力</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#0A2463;font-weight:600;border-bottom:1px solid #E0E0E0;">RAG</td>
+            <td style="padding:5px 0;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">检索增强生成（Retrieval-Augmented Generation），结合知识库检索与LLM生成的技术</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#0A2463;font-weight:600;border-bottom:1px solid #E0E0E0;">Token</td>
+            <td style="padding:5px 0;color:#4A4A4A;border-bottom:1px solid #E0E0E0;">语言模型处理的基本单位，中文约1.5-2字/Token，英文约0.75词/Token</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;color:#0A2463;font-weight:600;">Fine-tuning</td>
+            <td style="padding:5px 0;color:#4A4A4A;">微调，在预训练模型基础上使用特定数据进一步训练以适应特定任务</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- 第三栏：联系方式与版权 -->
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <!-- 联系方式卡片 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;flex:1;">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+          <iconify-icon icon="mdi:account-group" style="font-size:18px;color:#0A2463;margin-right:8px;"></iconify-icon>
+          <h3 style="font-family:'Times New Roman',serif;font-size:14px;color:#0A2463;margin:0;font-weight:600;">联系方式</h3>
+        </div>
+        
+        <div style="font-family:Arial,sans-serif;font-size:11px;color:#4A4A4A;line-height:1.7;">
+          <p style="margin:0 0 6px 0;"><span style="color:#9E9E9E;">项目负责人</span><br>演示文稿生成系统</p>
+          <p style="margin:0 0 6px 0;"><span style="color:#9E9E9E;">商务咨询</span><br>ai-research@[domain].com</p>
+          <p style="margin:0 0 6px 0;"><span style="color:#9E9E9E;">技术支持</span><br>tech-support@[domain].com</p>
+          <p style="margin:0;"><span style="color:#9E9E9E;">版本信息</span><br>Web Deck v2.0 · 2024-2025</p>
+        </div>
+      </div>
+
+      <!-- 版权与免责声明 -->
+      <div style="border:1px solid #E0E0E0;border-radius:4px;padding:14px 16px;background:#F8F9FA;">
+        <div style="display:flex;align-items:center;margin-bottom:10px;">
+          <iconify-icon icon="mdi:copyright" style="font-size:16px;color:#0A2463;margin-right:8px;"></iconify-icon>
+          <h4 style="font-family:'Times New Roman',serif;font-size:12px;color:#0A2463;margin:0;font-weight:600;">版权声明</h4>
+        </div>
+        <p style="font-family:Arial,sans-serif;font-size:9.5px;color:#4A4A4A;line-height:1.5;margin:0;">
+          本演示文稿内容仅供研究参考，数据来源已尽可能标注。文中预测性陈述反映研究机构观点，实际结果可能存在差异。未经授权禁止转载。
+        </p>
+      </div>
+
+      <!-- 延伸阅读推荐 -->
+      <div style="border:1px solid #0A2463;border-radius:4px;padding:12px 14px;background:linear-gradient(135deg,rgba(10,36,99,0.04) 0%,rgba(10,36,99,0.08) 100%);">
+        <p style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:700;margin:0 0 6px 0;">📚 延伸阅读</p>
+        <p style="font-family:Arial,sans-serif;font-size:9.5px;color:#4A4A4A;line-height:1.5;margin:0;">
+          《人工智能：一种现代方法》<br>
+          《深度学习》Ian Goodfellow<br>
+          MIT Technology Review<br>
+          Wired AI 专题报道
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部状态栏 -->
+  <div style="position:absolute;bottom:12px;left:48px;right:48px;display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid #E0E0E0;">
+    <div style="display:flex;align-items:center;gap:16px;">
+      <span style="font-family:Arial,sans-serif;font-size:10px;color:#9E9E9E;">附录 · 第12页</span>
+      <span style="font-family:Arial,sans-serif;font-size:10px;color:#9E9E9E;">|</span>
+      <span style="font-family:Arial,sans-serif;font-size:10px;color:#4A4A4A;">数据来源已标注 · 术语定义遵循国际标准</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-family:Arial,sans-serif;font-size:10px;color:#0A2463;font-weight:600;">2024-2025 AI发展现状与趋势</span>
+      <span style="font-family:Arial,sans-serif;font-size:10px;color:#9E9E9E;">·</span>
+      <iconify-icon icon="mdi:check-decagram" style="font-size:14px;color:#22c55e;"></iconify-icon>
+      <span style="font-family:Arial,sans-serif;font-size:10px;color:#22c55e;">已审核</span>
+    </div>
+  </div>
+</section></div></div>
+  </div>
+
+  <!-- P0: 右下角幽灵导航 -->
+  <div id="deck-nav-overlay">
+    <button class="deck-nav-btn" id="prevBtn" onclick="prevPage()" aria-label="上一页" title="上一页 (←)">
+      <iconify-icon icon="mdi:chevron-left"></iconify-icon>
+    </button>
+    <span id="deck-page-indicator">1 / 12</span>
+    <button class="deck-nav-btn" id="nextBtn" onclick="nextPage()" aria-label="下一页" title="下一页 (→)">
+      <iconify-icon icon="mdi:chevron-right"></iconify-icon>
+    </button>
+  </div>
+
+  <script>
+    // ── Web Deck Runtime (P0 + P2) ──
+    var totalPages = 12;
+    var currentPage = 0;
+    var slides = document.querySelectorAll('.deck-slide');
+
+    // P2: 缩放并居中 .deck-stage 以适配视口
+    function scaleSlide(slide) {
+      var stage = slide.querySelector('.deck-stage');
+      if (!stage) return;
+      var vw = slide.offsetWidth || window.innerWidth;
+      var vh = slide.offsetHeight || window.innerHeight;
+      var scale = Math.min(vw / 1280, vh / 720);
+      var ox = (vw - 1280 * scale) / 2;
+      var oy = (vh - 720 * scale) / 2;
+      stage.style.transform = 'translate(' + ox + 'px, ' + oy + 'px) scale(' + scale + ')';
+    }
+
+    function runChartInitScripts(slide) {
+      if (!slide || typeof window.echarts === 'undefined') return;
+      slide.querySelectorAll('script[type="application/webdeck-chart-init"]:not([data-webdeck-executed="true"])').forEach(function(script) {
+        try {
+          var run = new Function(script.textContent || '');
+          run();
+          script.setAttribute('data-webdeck-executed', 'true');
+        } catch (error) {
+          console.warn('[WebDeck] chart init failed', error);
+        }
+      });
+    }
+
+    function refreshActiveCharts() {
+      var activeSlide = slides[currentPage];
+      if (!activeSlide || !window.echarts || typeof window.echarts.getInstanceByDom !== 'function') return;
+
+      var nodes = activeSlide.querySelectorAll('[_echarts_instance_], .deck-chart-wrapper [id], [data-asset-kind="chart"][id]');
+      var visited = new Set();
+      nodes.forEach(function(node) {
+        if (visited.has(node)) return;
+        visited.add(node);
+        try {
+          var instance = window.echarts.getInstanceByDom(node);
+          if (instance) {
+            instance.resize({ animation: false });
+          }
+        } catch (error) {
+          console.warn('[WebDeck] chart refresh failed', error);
+        }
+      });
+    }
+
+    function syncActiveSlide() {
+      if (!slides[currentPage]) return;
+      scaleSlide(slides[currentPage]);
+      runChartInitScripts(slides[currentPage]);
+      refreshActiveCharts();
+      requestAnimationFrame(refreshActiveCharts);
+      window.setTimeout(refreshActiveCharts, 120);
+    }
+
+    function goToPage(index) {
+      if (index < 0 || index >= totalPages) return;
+      slides[currentPage].classList.remove('active');
+      currentPage = index;
+      slides[currentPage].classList.add('active');
+      syncActiveSlide();
+      updateUI();
+    }
+
+    function nextPage() { goToPage(currentPage + 1); }
+    function prevPage() { goToPage(currentPage - 1); }
+
+    function updateUI() {
+      document.getElementById('deck-progress-bar').style.width = ((currentPage + 1) / totalPages * 100) + '%';
+      document.getElementById('deck-page-indicator').textContent = (currentPage + 1) + ' / ' + totalPages;
+      document.getElementById('prevBtn').disabled = currentPage === 0;
+      document.getElementById('nextBtn').disabled = currentPage === totalPages - 1;
+    }
+
+    // P0: 左右方向键 + 空格键导航
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+        e.preventDefault(); nextPage();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault(); prevPage();
+      }
+    });
+
+    // 初始化
+    window.addEventListener('load', function() { syncActiveSlide(); updateUI(); });
+    window.addEventListener('resize', syncActiveSlide);
+    // 两步初始化：立即尝试 + RAF 推迟确保布局完成后再缩放/刷新图表
+    syncActiveSlide();
+    requestAnimationFrame(function() { syncActiveSlide(); });
+    updateUI();
+  </script>
+</body>
+</html>
