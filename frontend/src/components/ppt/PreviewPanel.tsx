@@ -323,39 +323,6 @@ export function PreviewPanel() {
   const messages = useChatStore((s) => s.messages);
 
   const toast = useToast();
-  const [isSavingAsset, setIsSavingAsset] = useState(false);
-
-  const handleSavePptToAssets = async () => {
-    if (!presentationId) {
-      toast.warning("演示文稿尚未就绪");
-      return;
-    }
-    
-    setIsSavingAsset(true);
-    try {
-      const res = await fetch(`/api/presentations/${presentationId}/save-to-assets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ export_format: "pptx-native" }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        throw new Error(data.detail || data.error || "保存失败");
-      }
-
-      if (data.asset?.id) {
-        toast.success("已成功保存至公共空间");
-      } else {
-        toast.warning("服务器未返回结果");
-      }
-    } catch (error: unknown) {
-      console.error("Save to assets error:", error);
-      toast.error(`保存失败: ${error instanceof Error ? error.message : "内部错误"}`);
-    } finally {
-      setIsSavingAsset(false);
-    }
-  };
   const setCurrentSlideIndex = useChatStore((s) => s.setCurrentSlideIndex);
 
   // Sprint 3 状态
@@ -804,15 +771,6 @@ export function PreviewPanel() {
             </button>
           )}
           {/* Sprint 3: 导出按钮 */}
-          <button
-              onClick={handleSavePptToAssets}
-              disabled={isSavingAsset || !presentationId}
-              className="text-[11px] px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-sm rounded-xl transition-all disabled:opacity-40 flex items-center gap-1 font-medium"
-              title="保存至公共空间并持久化"
-          >
-              {isSavingAsset ? "⏳ 保存中..." : "💾 保存至公共空间"}
-          </button>
-          
           <div className="relative">
             <button
               onClick={() => setShowExport(!showExport)}

@@ -416,29 +416,20 @@ class DeckDirector:
         project_id: str,
     ) -> None:
         """组装最终的 Web Deck — 将所有页面 HTML 合成一份完整 deck"""
-        from app.services.webdeck_runtime.artifact_composer import DeckComposer
-
-        project = await deck_state_store.get_project(session, project_id)
-        if not project:
-            return
+        from app.services.webdeck_runtime.publish_service import republish_project
 
         pages = await deck_state_store.get_pages(session, project_id)
-        manifest = DeckManifest.from_dict(project.manifest or {})
-
-        composer = DeckComposer()
-        full_html = composer.compose(manifest, pages)
-
-        # 保存发布记录
-        await deck_state_store.create_publish(
-            session, project_id,
-            version=project.version,
-            full_html=full_html,
+        publish, full_html = await republish_project(
+            session=session,
+            project_id=project_id,
+            metadata={"source": "runtime_complete"},
         )
 
         # 推送最终 deck 给前端
         await self.send_fn({
             "type": "webdeck_complete",
             "project_id": project_id,
+            "version": publish.version,
             "html": full_html,
             "page_count": len(pages),
         })

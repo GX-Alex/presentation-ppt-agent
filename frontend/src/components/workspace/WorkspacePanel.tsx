@@ -2,7 +2,7 @@
 
 import { useChatStore } from "@/stores/chatStore";
 import { PreviewPanel as PptViewer } from "@/components/ppt/PreviewPanel";
-import { DrawIoViewer } from "@/components/drawio/DrawIoViewer";
+import { DiagramWorkspaceShell } from "@/components/drawio/DiagramWorkspaceShell";
 import { CodeViewer } from "@/components/code/CodeViewer";
 import { DocumentViewer } from "@/components/document/DocumentViewer";
 import { WebSandboxViewer } from "@/components/web/WebSandboxViewer";
@@ -17,7 +17,7 @@ export function WorkspacePanel() {
       <div className="flex-1 min-h-0 w-full flex flex-col">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           <ArtifactActionsBar />
-          <DrawIoViewer embedded />
+          <DiagramWorkspaceShell />
         </div>
       </div>
     );

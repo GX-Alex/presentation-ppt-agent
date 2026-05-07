@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# General Agent — 开发模式启动脚本（支持热重载）
+# Presentation Agent — 开发模式启动脚本（支持热重载）
 # 使用 uvicorn CLI 方式启动，可以检测代码变更并自动重载
 #
 
@@ -37,7 +37,7 @@ check_port() {
 
 echo ""
 echo "=========================================="
-echo "  General Agent — 开发模式"
+echo "  Presentation Agent — 开发模式"
 echo "=========================================="
 echo ""
 

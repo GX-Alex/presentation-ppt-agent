@@ -15,6 +15,8 @@ from app.services.memory_service import (
     list_checkpoints,
     rollback_task_to_checkpoint,
 )
+from app.services.diagram_session_service import persist_diagram_session
+from app.services.diagram_xml_validator import validate_and_fix_xml
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -136,10 +138,25 @@ async def sync_workspace_artifact(
 
     artifact_type = str(body.get("artifact_type") or "").strip()
     content = str(body.get("content") or "").strip()
+    original_content = content
     if artifact_type not in WORKSPACE_ARTIFACT_TYPES:
         raise HTTPException(status_code=400, detail="不支持的工作区工件类型")
     if not content:
         raise HTTPException(status_code=400, detail="工件内容不能为空")
+
+    if artifact_type == "drawio":
+        validation = validate_and_fix_xml(content, allow_fragment=True)
+        if not validation.valid:
+            raise HTTPException(status_code=400, detail=validation.error or "draw.io XML 无效")
+        content = validation.xml
+        await persist_diagram_session(
+            session,
+            task_id=task_id,
+            xml=content,
+            source="workspace_sync",
+            validation=validation.to_dict(),
+        )
+        content = original_content
 
     message_content = _build_workspace_sync_content(artifact_type, content)
     latest_result = await session.execute(

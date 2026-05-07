@@ -5,7 +5,6 @@
     - PDF:  通过 Playwright 渲染后导出 PDF
     - PPTX 保真: Playwright 截图 → python-pptx 图片幻灯片（视觉一致）
     - PPTX 可编辑: 解析 HTML → python-pptx 文本/形状幻灯片（内容可编辑）
-    - PPTX Native: DeckSpec -> Node/PptxGenJS renderer（推荐）
 """
 import logging
 import os
@@ -19,14 +18,7 @@ from pptx import Presentation as PptxPresentation
 from pptx.util import Inches, Pt, Emu
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.package_runtime import (
-    DEFAULT_RUNTIME_USER_ID,
-    OFFICIAL_NATIVE_ORCHESTRATOR,
-    invoke_pptx_workflow_package,
-)
-from app.services.plugin_registry import record_artifact_variant
 from app.services.theme_manager import get_theme
 
 logger = logging.getLogger(__name__)
@@ -409,119 +401,6 @@ async def export_pptx_editable(
     logger.info(f"[Export] PPTX 可编辑导出完成: {filepath}, {len(slides_data)} 页")
 
     return f"exports/{filename}"
-
-
-async def export_pptx_native(
-    session: AsyncSession,
-    presentation_id: str,
-    slides_data: list[dict[str, Any]],
-    title: str,
-    theme_id: str = "tech_dark",
-    user_id: str = DEFAULT_RUNTIME_USER_ID,
-    workflow_package_id: str = OFFICIAL_NATIVE_ORCHESTRATOR,
-) -> str:
-    """通过官方 native-pptx-orchestrator workflow 导出 Native PPTX。"""
-    result = await orchestrate_native_pptx_workflow(
-        session,
-        presentation_id=presentation_id,
-        slides_data=slides_data,
-        title=title,
-        theme_id=theme_id,
-        user_id=user_id,
-        workflow_package_id=workflow_package_id,
-        persist_artifact=True,
-    )
-    return result["file_path"]
-
-
-async def orchestrate_native_pptx_workflow(
-    session: AsyncSession,
-    presentation_id: str,
-    slides_data: list[dict[str, Any]],
-    title: str,
-    theme_id: str = "tech_dark",
-    user_id: str = DEFAULT_RUNTIME_USER_ID,
-    workflow_package_id: str = OFFICIAL_NATIVE_ORCHESTRATOR,
-    persist_artifact: bool = True,
-) -> dict[str, Any]:
-    """Run a native PPTX workflow package and optionally persist the artifact."""
-    safe_title = re.sub(r'[^\w\u4e00-\u9fff-]', '_', title)[:50]
-    artifact_token = uuid.uuid4().hex[:8]
-    filename = f"{safe_title}_{artifact_token}_native.pptx"
-    preview_filename = f"{safe_title}_{artifact_token}_preview.html"
-    filepath = EXPORT_DIR / filename
-    preview_filepath = EXPORT_DIR / preview_filename
-
-    runtime_result = await invoke_pptx_workflow_package(
-        session,
-        user_id,
-        package_id=workflow_package_id,
-        presentation_id=presentation_id,
-        slides_data=slides_data,
-        title=title,
-        theme_id=theme_id,
-    )
-
-    if persist_artifact:
-        filepath.write_bytes(runtime_result["pptx_content"])
-        preview_filepath.write_text(runtime_result["html_preview_content"], encoding="utf-8")
-
-    artifact_variant = await record_artifact_variant(
-        session,
-        user_id,
-        package_id=runtime_result["workflow"]["package_id"],
-        package_version=runtime_result["workflow"]["package_version"],
-        variant_type="pptx-native",
-        file_url=f"exports/{filename}" if persist_artifact else None,
-        presentation_id=presentation_id,
-        installed_plugin_id=runtime_result["workflow"].get("installed_plugin_id"),
-        execution_log_id=runtime_result["workflow"].get("execution_log_id"),
-        mime_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        metadata={
-            "download_url": f"/static/exports/{filename}" if persist_artifact else None,
-            "renderer_execution_log_id": runtime_result["renderer"].get("execution_log_id"),
-        },
-    )
-
-    preview_variant = await record_artifact_variant(
-        session,
-        user_id,
-        package_id=runtime_result["workflow"]["package_id"],
-        package_version=runtime_result["workflow"]["package_version"],
-        variant_type="html-preview",
-        file_url=f"exports/{preview_filename}" if persist_artifact else None,
-        presentation_id=presentation_id,
-        installed_plugin_id=runtime_result["workflow"].get("installed_plugin_id"),
-        execution_log_id=runtime_result["workflow"].get("execution_log_id"),
-        mime_type="text/html",
-        metadata={
-            "download_url": f"/static/exports/{preview_filename}" if persist_artifact else None,
-            "preview_renderer_execution_log_id": runtime_result["preview"].get("execution_log_id"),
-            "artifact_role": "secondary_preview",
-        },
-    )
-    await session.commit()
-
-    logger.info(
-        "[Export] PPTX Native 导出完成: %s, slides=%s, warnings=%s, workflow=%s@%s",
-        filepath,
-        runtime_result["renderer"].get("slideCount"),
-        len(runtime_result["renderer"].get("warnings", [])),
-        runtime_result["workflow"]["package_id"],
-        runtime_result["workflow"]["package_version"],
-    )
-    return {
-        "file_path": f"exports/{filename}" if persist_artifact else None,
-        "download_url": f"/static/exports/{filename}" if persist_artifact else None,
-        "preview_file_path": f"exports/{preview_filename}" if persist_artifact else None,
-        "preview_download_url": f"/static/exports/{preview_filename}" if persist_artifact else None,
-        "deck_spec": runtime_result["deck_spec"],
-        "renderer": runtime_result["renderer"],
-        "preview": runtime_result["preview"],
-        "workflow": runtime_result["workflow"],
-        "artifact_variant_id": artifact_variant.id,
-        "html_artifact_variant_id": preview_variant.id,
-    }
 
 
 # ═══════════════ 内部辅助函数 ═══════════════

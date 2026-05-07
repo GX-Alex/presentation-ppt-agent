@@ -337,6 +337,11 @@ class PageBundle:
     css_tokens: dict = field(default_factory=dict)   # 页级 CSS 变量覆盖
     js_modules: list[str] = field(default_factory=list)
     artifacts: list[AssetNode] = field(default_factory=list)
+    editor_schema_version: str | None = None
+    editable_model: list[dict[str, Any]] = field(default_factory=list)
+    layout_model: list[dict[str, Any]] = field(default_factory=list)
+    asset_manifest: list[dict[str, Any]] = field(default_factory=list)
+    render_hints: dict[str, Any] = field(default_factory=dict)
     review: ReviewReport | None = None
 
     def to_dict(self) -> dict:
@@ -347,6 +352,11 @@ class PageBundle:
             "css_tokens": self.css_tokens,
             "js_modules": self.js_modules,
             "artifacts": [a.to_dict() for a in self.artifacts],
+            "editor_schema_version": self.editor_schema_version,
+            "editable_model": self.editable_model,
+            "layout_model": self.layout_model,
+            "asset_manifest": self.asset_manifest,
+            "render_hints": self.render_hints,
             "review": self.review.to_dict() if self.review else None,
         }
 

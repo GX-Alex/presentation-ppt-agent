@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# General Agent — 一键启动脚本
+# Presentation Agent — 一键启动脚本
 # 同时启动前端 (3000) 和后端 (8002)
 #
 
@@ -65,7 +65,7 @@ wait_for_service() {
 main() {
     echo ""
     echo "=========================================="
-    echo "  General Agent 启动脚本"
+    echo "  Presentation Agent 启动脚本"
     echo "=========================================="
     echo ""
 

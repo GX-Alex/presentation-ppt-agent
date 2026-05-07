@@ -9,6 +9,8 @@ import { ChevronLeft, ChevronRight, FileText, Layers3 } from "lucide-react";
 import { useDeckStore } from "@/stores/deckStore";
 import type { DeckPageData } from "@/stores/deckStore";
 import { useToast } from "@/components/ui/Toast";
+import { DeckPageEditor } from "./DeckPageEditor";
+import { DeckPageCanvas } from "./editor/DeckPageCanvas";
 
 function ensureHtmlDocument(content: string, title: string): string {
   if (/<html[\s>]/i.test(content) || /<!doctype/i.test(content)) {
@@ -232,15 +234,48 @@ ${slidesHtml}
       stage.style.transform = 'translate(' + ox + 'px, ' + oy + 'px) scale(' + scale + ')';
     }
 
-    function scaleAllSlides() { slides.forEach(function(s) { scaleSlide(s); }); }
+    function scaleCurrentSlide() {
+      if (!slides[currentPage]) return;
+      scaleSlide(slides[currentPage]);
+    }
+
+    function refreshActiveCharts() {
+      var activeSlide = slides[currentPage];
+      if (!activeSlide) return;
+
+      if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new Event('resize'));
+      }
+
+      if (!window.echarts || typeof window.echarts.getInstanceByDom !== 'function') {
+        return;
+      }
+
+      activeSlide.querySelectorAll('.deck-chart-wrapper [id]').forEach(function(node) {
+        try {
+          var instance = window.echarts.getInstanceByDom(node);
+          if (instance) {
+            instance.resize({ animation: false });
+          }
+        } catch (error) {
+          console.warn('[WebDeck] chart refresh failed', error);
+        }
+      });
+    }
+
+    function syncActiveSlide() {
+      scaleCurrentSlide();
+      refreshActiveCharts();
+      requestAnimationFrame(refreshActiveCharts);
+    }
 
     function goToPage(index) {
       if (index < 0 || index >= totalPages) return;
       slides[currentPage].classList.remove('active');
       currentPage = index;
       slides[currentPage].classList.add('active');
-      scaleSlide(slides[currentPage]);
       updateUI();
+      syncActiveSlide();
     }
 
     function nextPage() { goToPage(currentPage + 1); }
@@ -261,11 +296,11 @@ ${slidesHtml}
       }
     });
 
-    window.addEventListener('load', function() { scaleAllSlides(); updateUI(); });
-    window.addEventListener('resize', scaleAllSlides);
-    // 两步初始化：立即尝试 + RAF 推迟确保布局完成后再缩放
-    scaleAllSlides();
-    requestAnimationFrame(function() { scaleAllSlides(); });
+    window.addEventListener('load', function() { syncActiveSlide(); updateUI(); });
+    window.addEventListener('resize', syncActiveSlide);
+    // 两步初始化：立即尝试 + RAF 推迟确保布局完成后再缩放/刷新图表
+    syncActiveSlide();
+    requestAnimationFrame(syncActiveSlide);
     updateUI();
 
     window.addEventListener('beforeprint', function() {
@@ -287,8 +322,8 @@ ${slidesHtml}
     });
     window.addEventListener('afterprint', function() {
       // Restore scaling after print dialog closes
-      if (typeof scaleAllSlides === 'function') {
-        scaleAllSlides();
+      if (typeof syncActiveSlide === 'function') {
+        syncActiveSlide();
       }
     });
   <\/script>
@@ -301,9 +336,14 @@ export function DeckPagePreview() {
   const currentPageIndex = useDeckStore((s) => s.currentPageIndex);
   const setCurrentPageIndex = useDeckStore((s) => s.setCurrentPageIndex);
   const finalHtml = useDeckStore((s) => s.finalHtml);
+  const setFinalHtml = useDeckStore((s) => s.setFinalHtml);
   const deckStatus = useDeckStore((s) => s.deckStatus);
   const manifest = useDeckStore((s) => s.manifest);
   const projectId = useDeckStore((s) => s.projectId);
+  const isEditorMode = useDeckStore((s) => s.isEditorMode);
+  const setEditorMode = useDeckStore((s) => s.setEditorMode);
+  const draftHtmlByPageId = useDeckStore((s) => s.draftHtmlByPageId);
+  const setPageDraft = useDeckStore((s) => s.setPageDraft);
 
   const toast = useToast();
   const fullscreenRef = useRef<HTMLDivElement>(null);
@@ -322,23 +362,26 @@ export function DeckPagePreview() {
   const isDeckView = isDeckViewAvailable && viewMode === "deck";
   const canGoPrevious = currentPageIndex > 0;
   const canGoNext = currentPageIndex < totalPages - 1;
+  const currentDraftHtml = currentPage ? draftHtmlByPageId[currentPage.id] : undefined;
+  const editorHtml = currentDraftHtml || currentPage?.html || "";
+  const showEditorSurface = Boolean(!isDeckView && isEditorMode && currentPage && editorHtml);
 
   const displayHtml = useMemo(() => {
     if (isDeckView && finalHtml) {
       return finalHtml;
     }
-    return currentPage?.html || (isDeckViewAvailable ? finalHtml : null);
-  }, [currentPage?.html, finalHtml, isDeckView, isDeckViewAvailable]);
+    return currentDraftHtml || currentPage?.html || (isDeckViewAvailable ? finalHtml : null);
+  }, [currentDraftHtml, currentPage?.html, finalHtml, isDeckView, isDeckViewAvailable]);
 
   const previewDocument = useMemo(() => {
     if (!displayHtml) return null;
     return ensureHtmlDocument(displayHtml, previewTitle);
   }, [displayHtml, previewTitle]);
 
-  const combinedDocument = useMemo(() => {
-    const combinedHtml = finalHtml || composeDeckDocumentFromPages(exportTitle, pages);
-    if (!combinedHtml) return null;
-    return ensureHtmlDocument(combinedHtml, exportTitle);
+  const deckDocument = useMemo(() => {
+    const deckHtml = finalHtml || composeDeckDocumentFromPages(exportTitle, pages);
+    if (!deckHtml) return null;
+    return ensureHtmlDocument(deckHtml, exportTitle);
   }, [exportTitle, finalHtml, pages]);
 
   // printDocument 专用于 PDF 打印：始终使用 composeDeckDocumentFromPages，
@@ -348,12 +391,43 @@ export function DeckPagePreview() {
     [exportTitle, pages],
   );
 
-  const exportDocument = combinedDocument || previewDocument;
-  const iframeDocument = isFullscreen ? exportDocument : previewDocument;
+  const exportDocument = deckDocument || previewDocument;
+  const iframeDocument = isDeckView ? deckDocument : previewDocument;
 
   const canPersist = Boolean(exportDocument);
   const canPrint = Boolean(printDocument);
   const canExportPptx = Boolean(projectId) && pages.some((p) => Boolean(p.html));
+
+  const resolveLatestExportDocument = useCallback(async () => {
+    if (!exportDocument) {
+      return null;
+    }
+
+    if (!projectId || !pages.some((page) => Boolean(page.html?.trim()))) {
+      return exportDocument;
+    }
+
+    try {
+      const response = await fetch(`/api/webdeck/projects/${projectId}/publish`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "刷新整稿失败");
+      }
+
+      const latestHtml = String(data.html || "");
+      if (!latestHtml.trim()) {
+        throw new Error("后端返回的整稿 HTML 为空");
+      }
+
+      setFinalHtml(latestHtml);
+      return ensureHtmlDocument(latestHtml, exportTitle);
+    } catch (error: unknown) {
+      toast.warning(`刷新整稿失败，继续导出当前版本: ${error instanceof Error ? error.message : "未知错误"}`);
+      return exportDocument;
+    }
+  }, [exportDocument, exportTitle, pages, projectId, setFinalHtml, toast]);
 
   const handlePreviousPage = useCallback(() => {
     if (!canGoPrevious) return;
@@ -365,14 +439,15 @@ export function DeckPagePreview() {
     setCurrentPageIndex(currentPageIndex + 1);
   }, [canGoNext, currentPageIndex, setCurrentPageIndex]);
 
-  const handleDownload = useCallback(() => {
-    if (!exportDocument) {
+  const handleDownload = useCallback(async () => {
+    const latestExportDocument = await resolveLatestExportDocument();
+    if (!latestExportDocument) {
       toast.warning("当前没有可下载的整稿内容");
       return;
     }
 
     const fileName = getHtmlFilename(`${exportTitle}-${projectId?.slice(0, 8) || "deck"}`);
-    const blob = new Blob([exportDocument], { type: "text/html" });
+    const blob = new Blob([latestExportDocument], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -382,10 +457,11 @@ export function DeckPagePreview() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     toast.success("HTML 下载完成");
-  }, [exportDocument, exportTitle, projectId, toast]);
+  }, [exportTitle, projectId, resolveLatestExportDocument, toast]);
 
   const handleSaveToAssets = useCallback(async () => {
-    if (!exportDocument) {
+    const latestExportDocument = await resolveLatestExportDocument();
+    if (!latestExportDocument) {
       toast.warning("当前没有可保存的整稿内容");
       return;
     }
@@ -393,7 +469,7 @@ export function DeckPagePreview() {
     setIsSaving(true);
     try {
       const fileName = getHtmlFilename(`${exportTitle}-${projectId?.slice(0, 8) || "deck"}`);
-      const file = new File([exportDocument], fileName, { type: "text/html" });
+      const file = new File([latestExportDocument], fileName, { type: "text/html" });
       const formData = new FormData();
       formData.append("files", file);
 
@@ -413,7 +489,7 @@ export function DeckPagePreview() {
     } finally {
       setIsSaving(false);
     }
-  }, [exportDocument, exportTitle, projectId, toast]);
+  }, [exportTitle, projectId, resolveLatestExportDocument, toast]);
 
   const handlePrint = useCallback(() => {
     if (!printDocument) {
@@ -509,6 +585,16 @@ export function DeckPagePreview() {
   }, [deckStatus]);
 
   useEffect(() => {
+    if (!currentPage || isDeckView) {
+      setEditorMode(false);
+      return;
+    }
+    if (!draftHtmlByPageId[currentPage.id] && currentPage.html) {
+      setPageDraft(currentPage.id, currentPage.html);
+    }
+  }, [currentPage, draftHtmlByPageId, isDeckView, setEditorMode, setPageDraft]);
+
+  useEffect(() => {
     if (lastPageIndexRef.current !== currentPageIndex) {
       lastPageIndexRef.current = currentPageIndex;
       if (!isDeckView && !isFullscreen) {
@@ -517,9 +603,9 @@ export function DeckPagePreview() {
     }
   }, [currentPageIndex, isDeckView, isFullscreen]);
 
-  // Sync currentPageIndex → iframe goToPage when showing combined document
+  // Sync currentPageIndex → iframe goToPage when showing deck document
   useEffect(() => {
-    const showingCombined = isFullscreen || isDeckView;
+    const showingCombined = isDeckView;
     if (!showingCombined || !iframeRef.current) return;
     try {
       const win = iframeRef.current.contentWindow as (Window & { goToPage?: (i: number) => void }) | null;
@@ -531,7 +617,7 @@ export function DeckPagePreview() {
 
   // Keyboard arrow navigation when fullscreen
   useEffect(() => {
-    if (!isFullscreen) return;
+    if (!isFullscreen || isDeckView) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "ArrowRight" || event.key === "ArrowDown") {
         event.preventDefault();
@@ -543,10 +629,10 @@ export function DeckPagePreview() {
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isFullscreen, handleNextPage, handlePreviousPage]);
+  }, [isDeckView, isFullscreen, handleNextPage, handlePreviousPage]);
 
   const handleIframeLoad = useCallback(() => {
-    const showingCombined = isFullscreen || isDeckView;
+    const showingCombined = isDeckView;
     if (!showingCombined || currentPageIndex === 0 || !iframeRef.current) return;
     try {
       const win = iframeRef.current.contentWindow as (Window & { goToPage?: (i: number) => void }) | null;
@@ -554,7 +640,7 @@ export function DeckPagePreview() {
     } catch {
       // ignore
     }
-  }, [isFullscreen, isDeckView, currentPageIndex]);
+  }, [isDeckView, currentPageIndex]);
 
   if (!displayHtml) {
     return (
@@ -638,6 +724,20 @@ export function DeckPagePreview() {
               </button>
             </div>
           )}
+
+          {!isDeckView && currentPage?.html && projectId && (
+            <button
+              onClick={() => setEditorMode(!isEditorMode)}
+              className={`rounded-2xl border px-3 py-2 text-xs font-medium shadow-sm backdrop-blur-sm transition-colors ${
+                isEditorMode
+                  ? "border-slate-800 bg-slate-900 text-white"
+                  : "border-gray-200 bg-white/90 text-gray-700 hover:bg-white"
+              }`}
+              title="打开 WebDeck 原生编辑器"
+            >
+              {isEditorMode ? "退出编辑" : "编辑当前页"}
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -684,22 +784,36 @@ export function DeckPagePreview() {
         </div>
       </div>
 
-      <div className="h-full w-full pt-24 md:pt-16">
-        <iframe
-          ref={iframeRef}
-          srcDoc={iframeDocument || undefined}
-          onLoad={handleIframeLoad}
-          sandbox="allow-scripts allow-same-origin"
-          className="w-full h-full border-0 bg-white"
-          title={
-            isFullscreen
-              ? "Web Deck 全屏整稿展示"
-              : isDeckView
-              ? "Web Deck 预览"
-              : `页面 ${currentPageIndex + 1} 预览`
-          }
-        />
+      <div className={`h-full w-full ${isFullscreen ? "pt-0" : "pt-24 md:pt-16"} ${isEditorMode ? "md:pr-[17.75rem] xl:pr-[18.25rem]" : ""}`}>
+        {showEditorSurface && currentPage ? (
+          <div className="h-full w-full p-4 md:py-6 md:pl-6 md:pr-3 xl:pr-4">
+            <DeckPageCanvas page={currentPage} html={editorHtml} />
+          </div>
+        ) : (
+          <iframe
+            ref={iframeRef}
+            srcDoc={iframeDocument || undefined}
+            onLoad={handleIframeLoad}
+            sandbox="allow-scripts allow-same-origin"
+            className="w-full h-full border-0 bg-white"
+            title={
+              isFullscreen
+                ? "Web Deck 全屏整稿展示"
+                : isDeckView
+                ? "Web Deck 预览"
+                : `页面 ${currentPageIndex + 1} 预览`
+            }
+          />
+        )}
       </div>
+
+      {isEditorMode && currentPage && projectId && (
+        <DeckPageEditor
+          projectId={projectId}
+          page={currentPage}
+          onClose={() => setEditorMode(false)}
+        />
+      )}
     </div>
   );
 }

@@ -299,7 +299,7 @@ class ArtifactVariant(Base):
     execution_log_id = Column(String(36), ForeignKey("execution_logs.id"), nullable=True)
     package_id = Column(String(127), nullable=False)
     package_version = Column(String(30), nullable=True)
-    variant_type = Column(String(30), nullable=False)  # pptx-native | html-preview | pdf | thumbnail
+    variant_type = Column(String(30), nullable=False)  # html-preview | pdf | thumbnail | legacy values
     mime_type = Column(String(127), nullable=True)
     file_url = Column(String(1024), nullable=True)
     metadata_ = Column("metadata", JSON, nullable=True)
@@ -440,6 +440,22 @@ class DeckPage(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (UniqueConstraint("project_id", "page_id"),)
+
+
+class DeckPageVersion(Base):
+    __tablename__ = "deck_page_versions"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    project_id = Column(String(36), ForeignKey("deck_projects.id"), nullable=False)
+    page_db_id = Column(String(36), ForeignKey("deck_pages.id"), nullable=False)
+    version = Column(Integer, nullable=False)
+    source = Column(String(20), nullable=False, default="manual")
+    html = Column(Text, nullable=False)
+    change_summary = Column(Text, nullable=True)
+    metadata_ = Column("metadata", JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("page_db_id", "version"),)
 
 
 class LaneRun(Base):

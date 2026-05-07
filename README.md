@@ -1,4 +1,4 @@
-# 通用智能体平台 (General Agent Platform)
+# 智能演示平台 (Presentation Agent Platform)
 
 > **一阶段聚焦 PPT/文档生成** 的通用 AI 智能体平台。  
 > 核心理念：Agent Loop + Tool Dispatch + Skill 按需加载 + 四层记忆 + 上下文压缩。

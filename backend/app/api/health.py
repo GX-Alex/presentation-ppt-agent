@@ -14,7 +14,7 @@ async def health_check():
     uptime = time.time() - APP_START_TIME
     return {
         "status": "ok",
-        "service": "generalagent-backend",
+        "service": "presentationagent-backend",
         "version": "0.1.0",
         "uptime_seconds": round(uptime, 1),
     }

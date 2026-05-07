@@ -115,6 +115,9 @@ async def fetch_remote_package_bundle(source_id: str) -> RemotePackageBundle:
 async def fetch_remote_package_bundle_from_spec(spec: GitHubRemoteSource) -> RemotePackageBundle:
     """Fetch a remote bundle from an explicit GitHub source spec."""
 
+    if spec.source_id == "minimax.pptx-plugin":
+        raise RemotePackageImportError("minimax.pptx-plugin 已下线，因为平台已移除原生 PPTX 导出链路")
+
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers=_github_headers()) as client:
         if spec.package_kind == "tool_adapter":
             return await _fetch_tool_adapter_bundle(client, spec)
@@ -197,13 +200,12 @@ async def _fetch_minimax_pptx_plugin_bundle(
             {"name": "document.parse", "rationale": "解析文档与 PPT 文本内容以支持工作流"},
         ],
         "dependencies": [
-            {"package_id": "official.native-pptx-renderer", "version_constraint": ">=0.2.0"},
             {"package_id": "minimax.pptx-generator-skillset", "version_constraint": ">=0.2.0"},
             {"package_id": "official.html-preview-renderer", "version_constraint": ">=0.2.0", "optional": True},
         ],
         "compatibility": {
             "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
+            "target_artifact_mode": ["dual_render"],
         },
         "entrypoints": [
             {
@@ -904,6 +906,8 @@ def _normalize_adapter_entrypoint(raw: Any) -> dict[str, Any] | None:
         target = raw.strip()
         if not target:
             return None
+        if target == "render.native_pptx":
+            raise RemotePackageImportError("render.native_pptx 已下线，远端原生渲染适配器不再支持导入")
         return {
             "kind": "adapter",
             "target": target,
@@ -916,6 +920,8 @@ def _normalize_adapter_entrypoint(raw: Any) -> dict[str, Any] | None:
     target = str(raw.get("target") or raw.get("adapter_target") or "").strip()
     if not target:
         return None
+    if target == "render.native_pptx":
+        raise RemotePackageImportError("render.native_pptx 已下线，远端原生渲染适配器不再支持导入")
     return {
         "kind": "adapter",
         "target": target,
@@ -926,8 +932,6 @@ def _normalize_adapter_entrypoint(raw: Any) -> dict[str, Any] | None:
 def _default_adapter_entrypoint_description(target: str) -> str:
     if target == "deckspec.v1":
         return "读取或检查演示文稿的 canonical DeckSpec。"
-    if target == "render.native_pptx":
-        return "将 canonical DeckSpec 渲染为 Native PPTX 导出产物。"
     if target == "render.html_preview":
         return "将 canonical DeckSpec 渲染为 HTML 预览。"
     return f"Invoke adapter target {target}."
@@ -1045,7 +1049,6 @@ def _default_remote_tool_name(package_id: str, adapter_target: str) -> str:
     package_tail = re.sub(r"[^a-z0-9]+", "_", package_id.split(".")[-1].lower()).strip("_") or "adapter"
     target_alias = {
         "deckspec.v1": "deckspec",
-        "render.native_pptx": "native_pptx",
         "render.html_preview": "html_preview",
     }.get(adapter_target, re.sub(r"[^a-z0-9]+", "_", adapter_target.lower()).strip("_"))
     return f"{package_tail}_{target_alias}"
@@ -1054,8 +1057,6 @@ def _default_remote_tool_name(package_id: str, adapter_target: str) -> str:
 def _default_remote_tool_description(display_name: str, description: str, adapter_target: str) -> str:
     if adapter_target == "deckspec.v1":
         return f"Inspect the canonical DeckSpec through {display_name or 'the adapter package'}."
-    if adapter_target == "render.native_pptx":
-        return f"Export a presentation as Native PPTX through {display_name or 'the adapter package'}."
     if adapter_target == "render.html_preview":
         return f"Render a presentation as HTML preview through {display_name or 'the adapter package'}."
     return description or f"Invoke adapter target {adapter_target}."
@@ -1107,7 +1108,6 @@ def _derive_tool_adapter_capabilities(entrypoints: list[dict[str, Any]]) -> list
     capabilities = {"tool.dynamic_llm"}
     target_map = {
         "deckspec.v1": "deckspec.inspect",
-        "render.native_pptx": "pptx.render.native",
         "render.html_preview": "preview.render.html",
     }
     for entrypoint in entrypoints:
@@ -1123,9 +1123,6 @@ def _derive_tool_adapter_permissions(entrypoints: list[dict[str, Any]]) -> list[
         target = str(entrypoint.get("target") or "")
         if target == "deckspec.v1":
             permissions.setdefault("registry.read", "读取 DeckSpec 契约与平台元数据以解析 canonical 表示。")
-        elif target == "render.native_pptx":
-            permissions.setdefault("pptx.render", "执行 Native PPTX 渲染任务。")
-            permissions.setdefault("asset.write", "保存导出产物到平台资产目录。")
         elif target == "render.html_preview":
             permissions.setdefault("preview.render", "生成 HTML 预览内容。")
             permissions.setdefault("asset.write", "保存 HTML 预览产物到平台资产目录。")
@@ -1141,12 +1138,7 @@ def _derive_tool_adapter_dependencies(entrypoints: list[dict[str, Any]]) -> list
     }
     for entrypoint in entrypoints:
         target = str(entrypoint.get("target") or "")
-        if target == "render.native_pptx":
-            dependencies.setdefault(
-                "official.native-pptx-renderer",
-                {"package_id": "official.native-pptx-renderer", "version_constraint": ">=0.2.0", "optional": True},
-            )
-        elif target == "render.html_preview":
+        if target == "render.html_preview":
             dependencies.setdefault(
                 "official.html-preview-renderer",
                 {"package_id": "official.html-preview-renderer", "version_constraint": ">=0.2.0", "optional": True},

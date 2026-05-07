@@ -9,9 +9,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.core.llm_client import llm_timeout_override
 from app.services.webdeck_runtime.director import DeckDirector
 
 logger = logging.getLogger(__name__)
+REGENERATE_DECK_PAGE_LLM_TIMEOUT_S = 240
 
 TOOL_DEFINITION: dict[str, Any] = {
     "type": "function",
@@ -67,7 +69,8 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
 
     director = DeckDirector(send_fn=_noop_send)
     try:
-        await director.retry_page(project_id=project_id, page_id=page_id)
+        with llm_timeout_override(REGENERATE_DECK_PAGE_LLM_TIMEOUT_S):
+            await director.retry_page(project_id=project_id, page_id=page_id)
         return {
             "result": f"✅ 页面 {page_id} 已重新生成完成",
             "project_id": project_id,

@@ -291,7 +291,7 @@ export function Sidebar() {
       {/* Footer */}
       {!collapsed && (
         <div className="px-5 py-4 text-[11px] text-gray-400 font-medium">
-          General Agent v1.0.0
+          Presentation Agent v1.0.0
         </div>
       )}
     </>

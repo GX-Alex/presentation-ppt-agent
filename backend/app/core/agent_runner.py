@@ -35,6 +35,118 @@ from app.services.context_service import (
 logger = logging.getLogger(__name__)
 
 MAX_SUBAGENT_TOOL_RESULT = 4000  # 子 agent 内部工具结果截断（增大以减少信息丢失）
+DIAGRAM_RUNTIME_TOOLS = {
+    "display_diagram",
+    "edit_diagram",
+    "append_diagram",
+    "get_current_diagram",
+    "get_shape_library",
+}
+
+_DIAGRAM_HISTORY_VALIDATION_KEYS = {
+    "valid",
+    "fixed",
+    "fixes",
+    "warnings",
+    "error",
+    "review_passed",
+    "review_mode",
+    "retry_recommended",
+    "retry_count",
+    "max_retries",
+    "score",
+    "critical_count",
+    "warning_count",
+    "snapshot_source",
+    "updated_at",
+}
+_DIAGRAM_HISTORY_SESSION_KEYS = {
+    "session_id",
+    "task_id",
+    "version",
+    "summary",
+    "source",
+    "created_at",
+}
+
+
+def _slim_diagram_validation_payload(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+
+    slim: dict[str, Any] = {
+        key: payload[key]
+        for key in _DIAGRAM_HISTORY_VALIDATION_KEYS
+        if key in payload
+    }
+    issues = payload.get("issues")
+    if isinstance(issues, list):
+        slim["issues"] = issues[:8]
+    suggestions = payload.get("suggestions")
+    if isinstance(suggestions, list):
+        slim["suggestions"] = suggestions[:5]
+    return slim
+
+
+def _slim_diagram_session_payload(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+
+    slim: dict[str, Any] = {
+        key: payload[key]
+        for key in _DIAGRAM_HISTORY_SESSION_KEYS
+        if key in payload
+    }
+    validation = _slim_diagram_validation_payload(payload.get("validation"))
+    if validation:
+        slim["validation"] = validation
+    return slim
+
+
+def _slim_diagram_tool_result(tool_name: str, tool_result: Any, *, for_context: bool) -> Any:
+    if not isinstance(tool_result, dict):
+        return tool_result
+
+    # get_current_diagram must remain detailed for the active round so the model
+    # can inspect current XML before deciding edit operations, but history should
+    # still be slim.
+    if for_context and tool_name == "get_current_diagram":
+        return tool_result
+
+    slim: dict[str, Any] = {}
+    for key in ("ok", "error", "has_diagram", "retry_recommended", "blocked", "timeout", "tool"):
+        if key in tool_result:
+            slim[key] = tool_result[key]
+
+    if "diagram_session" in tool_result:
+        slim["diagram_session"] = _slim_diagram_session_payload(tool_result.get("diagram_session"))
+
+    if "validation" in tool_result:
+        slim["validation"] = _slim_diagram_validation_payload(tool_result.get("validation"))
+
+    apply_result = tool_result.get("apply_result")
+    if isinstance(apply_result, dict):
+        slim["apply_result"] = {
+            key: apply_result[key]
+            for key in ("success", "operations_applied", "errors", "warnings")
+            if key in apply_result
+        }
+
+    if not slim:
+        return tool_result
+    return slim
+
+
+def _build_persisted_tool_result(tool_name: str, tool_result: Any) -> Any:
+    if tool_name not in DIAGRAM_RUNTIME_TOOLS:
+        return tool_result
+    return _slim_diagram_tool_result(tool_name, tool_result, for_context=False)
+
+
+def _build_context_tool_result(tool_name: str, tool_result: Any) -> Any:
+    if tool_name not in DIAGRAM_RUNTIME_TOOLS:
+        return tool_result
+    return _slim_diagram_tool_result(tool_name, tool_result, for_context=True)
 
 
 def _classify_llm_error(e: Exception) -> tuple[str, bool]:
@@ -616,6 +728,9 @@ class AgentRunner:
                 if tc.name == "dispatch_subagent":
                     from app.tools.dispatch_subagent import set_runtime_context
                     set_runtime_context(ctx.send_fn, task, ctx.model)
+                elif tc.name in DIAGRAM_RUNTIME_TOOLS:
+                    from app.services.diagram_runtime import set_runtime_context as set_diagram_runtime_context
+                    set_diagram_runtime_context(ctx.send_fn, ctx.task_id, ctx.user_id)
 
                 tool_result = await dispatch(
                     tc.name,
@@ -627,12 +742,15 @@ class AgentRunner:
             # on_tool_end — 中间件可修改结果 (PPT事件推送、循环记录、错误处理)
             tool_result = await chain.run_tool_end(ctx, tc.name, params or tc.input, tool_result)
 
+            persisted_tool_result = _build_persisted_tool_result(tc.name, tool_result)
+            context_tool_result = _build_context_tool_result(tc.name, tool_result)
+
             # 持久化 Tool 记录
             tool_msg_record = TaskMessage(
                 id=str(uuid.uuid4()),
                 task_id=ctx.task_id,
                 role="tool",
-                content=json.dumps(tool_result, ensure_ascii=False),
+                content=json.dumps(persisted_tool_result, ensure_ascii=False),
                 msg_type="tool_result",
                 tool_name=tc.name,
                 tool_input={"_tool_call_id": tc.id, **(params or tc.input)},
@@ -644,7 +762,7 @@ class AgentRunner:
             ctx.messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
-                "content": json.dumps(tool_result, ensure_ascii=False),
+                "content": json.dumps(context_tool_result, ensure_ascii=False),
             })
 
         await ctx.session.commit()

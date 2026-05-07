@@ -1,6 +1,6 @@
 /**
  * ExportPanel 组件 — 导出按钮面板。
- * 支持五种导出格式: HTML / PDF / PPTX原生 / PPTX保真 / PPTX可编辑。
+ * 支持四种导出格式: HTML / PDF / PPTX保真 / PPTX可编辑。
  * 导出操作通过 REST API 调用后端服务。
  */
 "use client";
@@ -22,12 +22,6 @@ const EXPORT_FORMATS = [
     label: "PDF",
     icon: "📄",
     desc: "高质量 PDF，Playwright 渲染",
-  },
-  {
-    id: "pptx-native",
-    label: "PPTX 原生",
-    icon: "✨",
-    desc: "Node Native Renderer，优先推荐",
   },
   {
     id: "pptx-faithful",

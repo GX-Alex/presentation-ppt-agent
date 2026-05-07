@@ -4,9 +4,11 @@ LLM 统一客户端 — 封装 litellm，支持多模型切换。
 Sprint 4: Token 用量日志 + 85% 阈值告警 + 累计追踪。
 """
 import asyncio
+import contextvars
 import json
 import logging
 import os
+from contextlib import contextmanager
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any
@@ -28,6 +30,10 @@ DEFAULT_LLM_RETRY_BASE_DELAY = 0.8
 DEFAULT_LLM_RETRY_MAX_DELAY = 6.0
 # 单次 LLM HTTP 调用超时（秒）— 防止 LLM 挂起导致 asyncio.Task 永远阻塞
 LLM_CALL_TIMEOUT_S: int = int(os.getenv("LLM_CALL_TIMEOUT_S", "120"))
+_llm_timeout_override_s: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "llm_timeout_override_s",
+    default=None,
+)
 MINIMAX_MODEL_FALLBACKS = {
     "minimax/minimax-m2.7": ["minimax/MiniMax-M2.5"],
 }
@@ -131,6 +137,19 @@ def _get_float_env(name: str, default: float) -> float:
     except ValueError:
         logger.warning("[LLM] invalid float env %s=%r, fallback=%s", name, raw, default)
         return default
+
+
+def _resolve_request_timeout_s(request_timeout_s: int | None = None) -> int:
+    return request_timeout_s or _llm_timeout_override_s.get() or LLM_CALL_TIMEOUT_S
+
+
+@contextmanager
+def llm_timeout_override(timeout_seconds: int):
+    token = _llm_timeout_override_s.set(timeout_seconds)
+    try:
+        yield
+    finally:
+        _llm_timeout_override_s.reset(token)
 
 
 def _is_minimax_model(model: str, base_url: str | None) -> bool:
@@ -284,15 +303,17 @@ async def _call_completion_with_retry(
     """对单模型请求执行有限重试。"""
     max_retries, base_delay, max_delay = _get_retry_config()
     last_error: Exception | None = None
+    request_timeout_s = _resolve_request_timeout_s(request_kwargs.get("_request_timeout_s"))
+    provider_kwargs = {key: value for key, value in request_kwargs.items() if key != "_request_timeout_s"}
 
     for attempt in range(max_retries + 1):
         try:
             async with _llm_semaphore:
                 response = await litellm.acompletion(
-                    **request_kwargs,
-                    request_timeout=LLM_CALL_TIMEOUT_S,
+                    **provider_kwargs,
+                    request_timeout=request_timeout_s,
                 )
-            _validate_completion_response(response, model=request_kwargs["model"])
+            _validate_completion_response(response, model=provider_kwargs["model"])
             return response
         except Exception as error:
             last_error = error
@@ -302,7 +323,7 @@ async def _call_completion_with_retry(
                 logger.warning(
                     "[LLM] retrying call: task=%s model=%s attempt=%s/%s delay=%.1fs error=%s",
                     task_id,
-                    request_kwargs.get("model"),
+                    provider_kwargs.get("model"),
                     attempt + 1,
                     max_retries + 1,
                     delay,
@@ -390,6 +411,7 @@ async def chat(
     tools: list[dict[str, Any]] | None = None,
     model: str | None = None,
     task_id: str | None = None,
+    request_timeout_s: int | None = None,
 ) -> LLMResponse:
     """
     向配置的 LLM 发送聊天补全请求。
@@ -400,6 +422,7 @@ async def chat(
         tools: 可选的 Tool 定义列表 (JSON Schema)
         model: 覆盖默认模型名称
         task_id: 用于日志上下文
+        request_timeout_s: 覆盖默认单次 LLM HTTP 超时（秒）
 
     Returns:
         LLMResponse，包含 content、stop_reason 和可选的 tool_calls
@@ -421,6 +444,7 @@ async def chat(
         "model": model,
         "messages": full_messages,
         "api_key": _get_api_key(),
+        "_request_timeout_s": request_timeout_s,
     }
     if base_url:
         kwargs["api_base"] = base_url
@@ -536,17 +560,19 @@ async def _get_stream_response_with_retry(
     primary_model = request_kwargs["model"]
     candidate_models = _get_model_candidates(primary_model, base_url)
     last_error: Exception | None = None
+    request_timeout_s = _resolve_request_timeout_s(request_kwargs.get("_request_timeout_s"))
 
     for index, candidate_model in enumerate(candidate_models):
         model_kwargs = dict(request_kwargs)
         model_kwargs["model"] = candidate_model
+        provider_kwargs = {key: value for key, value in model_kwargs.items() if key != "_request_timeout_s"}
 
         for attempt in range(max_retries + 1):
             try:
                 async with _llm_semaphore:
                     response = await litellm.acompletion(
-                        **model_kwargs,
-                        request_timeout=LLM_CALL_TIMEOUT_S,
+                        **provider_kwargs,
+                        request_timeout=request_timeout_s,
                     )
                 if candidate_model != primary_model:
                     logger.warning(
@@ -584,6 +610,7 @@ async def chat_stream(
     tools: list[dict] | None = None,
     model: str | None = None,
     task_id: str | None = None,
+    request_timeout_s: int | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Streaming version of chat(). Yields chunks as they arrive.
 
@@ -609,6 +636,7 @@ async def chat_stream(
         "messages": all_messages,
         "api_key": api_key,
         "stream": True,
+        "_request_timeout_s": request_timeout_s,
     }
     if base_url:
         kwargs["api_base"] = base_url

@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import ClientProviders from "@/components/layout/ClientProviders";
 
 export const metadata: Metadata = {
-  title: "General Agent Platform",
+  title: "Presentation Agent Platform",
   description: "通用智能体平台 — AI 驱动的 PPT/文档生成",
 };
 

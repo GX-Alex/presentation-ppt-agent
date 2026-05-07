@@ -44,7 +44,7 @@ HIGH_VALUE_PAGE_KINDS = {
 }
 
 MAX_PAGE_REVIEW_RETRIES = 2
-MIN_ACCEPTABLE_SCORE = 0.6
+MIN_ACCEPTABLE_SCORE = 0.85
 
 # ── Lane 超时配置（秒） ──
 # Minimax LLM 单次调用最长约 120s (litellm timeout)，lane timeout 必须 > 120s 才能等到回包

@@ -50,7 +50,7 @@ _BUILTIN_MANIFESTS: tuple[dict[str, Any], ...] = (
         ],
         "compatibility": {
             "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
+            "target_artifact_mode": ["dual_render"],
         },
         "entrypoints": [
             {
@@ -80,7 +80,7 @@ _BUILTIN_MANIFESTS: tuple[dict[str, Any], ...] = (
         ],
         "compatibility": {
             "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
+            "target_artifact_mode": ["dual_render"],
         },
         "entrypoints": [
             {
@@ -93,74 +93,6 @@ _BUILTIN_MANIFESTS: tuple[dict[str, Any], ...] = (
             "release_date": "2026-03-30",
             "release_notes": "新增对象级 QA 元数据与布局诊断字段，便于升级后的版本对比和回滚审计。",
             "upgrade_notes": "建议与 0.2.x 渲染器及工作流一起升级，避免旧版依赖缺少 QA 字段。",
-        },
-    },
-    {
-        "schema_version": "1.0.0",
-        "package_id": "official.native-pptx-renderer",
-        "display_name": "Native PPTX Renderer",
-        "kind": "tool_adapter",
-        "version": "0.1.0",
-        "description": "将 DeckSpec 渲染为 Native PPTX，可作为未来原生可编辑导出的权威渲染器。",
-        "publisher": "GeneralAgent",
-        "tags": ["pptx", "renderer", "native"],
-        "capabilities": ["pptx.render.native"],
-        "permissions": [
-            {"name": "pptx.render", "rationale": "执行 Native PPTX 渲染任务"},
-            {"name": "asset.write", "rationale": "保存渲染产物到平台资产库"},
-        ],
-        "dependencies": [
-            {"package_id": "official.deckspec-contract", "version_constraint": "=0.1.0"},
-        ],
-        "compatibility": {
-            "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
-        },
-        "entrypoints": [
-            {
-                "kind": "adapter",
-                "target": "render.native_pptx",
-                "description": "将 DeckSpec 渲染为可编辑 PPTX。",
-            }
-        ],
-        "metadata": {
-            "release_date": "2026-03-21",
-            "release_notes": "提供基础 Native PPTX 导出链路。",
-            "upgrade_notes": "无。",
-        },
-    },
-    {
-        "schema_version": "1.0.0",
-        "package_id": "official.native-pptx-renderer",
-        "display_name": "Native PPTX Renderer",
-        "kind": "tool_adapter",
-        "version": "0.2.0",
-        "description": "将 DeckSpec 渲染为 Native PPTX，并补充母版映射与对象级回溯信息。",
-        "publisher": "GeneralAgent",
-        "tags": ["pptx", "renderer", "native"],
-        "capabilities": ["pptx.render.native", "pptx.render.master_mapping"],
-        "permissions": [
-            {"name": "pptx.render", "rationale": "执行 Native PPTX 渲染任务"},
-            {"name": "asset.write", "rationale": "保存渲染产物到平台资产库"},
-        ],
-        "dependencies": [
-            {"package_id": "official.deckspec-contract", "version_constraint": "=0.2.0"},
-        ],
-        "compatibility": {
-            "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
-        },
-        "entrypoints": [
-            {
-                "kind": "adapter",
-                "target": "render.native_pptx",
-                "description": "将 DeckSpec 渲染为可编辑 PPTX。",
-            }
-        ],
-        "metadata": {
-            "release_date": "2026-03-30",
-            "release_notes": "新增母版映射与对象级 trace id，便于导出后比对与问题回溯。",
-            "upgrade_notes": "升级后建议重导出最近一版 deck，以补齐 trace id。",
         },
     },
     {
@@ -249,7 +181,7 @@ _BUILTIN_MANIFESTS: tuple[dict[str, Any], ...] = (
         ],
         "compatibility": {
             "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
+            "target_artifact_mode": ["dual_render"],
         },
         "entrypoints": [
             {
@@ -287,7 +219,7 @@ _BUILTIN_MANIFESTS: tuple[dict[str, Any], ...] = (
         ],
         "compatibility": {
             "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
+            "target_artifact_mode": ["dual_render"],
         },
         "entrypoints": [
             {
@@ -300,85 +232,6 @@ _BUILTIN_MANIFESTS: tuple[dict[str, Any], ...] = (
             "release_date": "2026-03-30",
             "release_notes": "新增页面密度护栏与版式风险约束，减少生成后期返工。",
             "upgrade_notes": "升级后建议重新生成大纲，以便新约束充分生效。",
-        },
-    },
-    {
-        "schema_version": "1.0.0",
-        "package_id": "official.native-pptx-orchestrator",
-        "display_name": "Native PPTX Orchestrator",
-        "kind": "workflow",
-        "version": "0.1.0",
-        "description": "官方 Native PPTX-first 工作流编排包，统一处理澄清、规划、渲染与审查。",
-        "publisher": "GeneralAgent",
-        "tags": ["workflow", "pptx", "native"],
-        "capabilities": ["workflow.requirement_clarification", "workflow.deck_planning", "workflow.review_repair"],
-        "permissions": [
-            {"name": "model.invoke", "rationale": "执行规划、审查与修复阶段的模型调用"},
-            {"name": "asset.read", "rationale": "读取用户上传的参考资料与模板资产"},
-            {"name": "document.parse", "rationale": "解析上传文档形成结构化输入"},
-        ],
-        "dependencies": [
-            {"package_id": "official.native-pptx-renderer", "version_constraint": "=0.1.0"},
-            {"package_id": "official.html-preview-renderer", "version_constraint": "=0.1.0"},
-            {"package_id": "minimax.pptx-generator-skillset", "version_constraint": "=0.1.0"},
-        ],
-        "compatibility": {
-            "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
-        },
-        "entrypoints": [
-            {
-                "kind": "workflow",
-                "target": "workflows/native-pptx-orchestrator",
-                "description": "以插件工作流取代 legacy HTML 大纲/逐页生成链。",
-            }
-        ],
-        "metadata": {
-            "release_date": "2026-03-21",
-            "release_notes": "原生 PPTX-first 的首个官方工作流版本。",
-            "upgrade_notes": "无。",
-        },
-    },
-    {
-        "schema_version": "1.0.0",
-        "package_id": "official.native-pptx-orchestrator",
-        "display_name": "Native PPTX Orchestrator",
-        "kind": "workflow",
-        "version": "0.2.0",
-        "description": "官方 Native PPTX-first 工作流编排包，补充澄清闭环、版本审查和回滚感知。",
-        "publisher": "GeneralAgent",
-        "tags": ["workflow", "pptx", "native"],
-        "capabilities": [
-            "workflow.requirement_clarification",
-            "workflow.deck_planning",
-            "workflow.review_repair",
-            "workflow.version_audit",
-        ],
-        "permissions": [
-            {"name": "model.invoke", "rationale": "执行规划、审查与修复阶段的模型调用"},
-            {"name": "asset.read", "rationale": "读取用户上传的参考资料与模板资产"},
-            {"name": "document.parse", "rationale": "解析上传文档形成结构化输入"},
-        ],
-        "dependencies": [
-            {"package_id": "official.native-pptx-renderer", "version_constraint": "=0.2.0"},
-            {"package_id": "official.html-preview-renderer", "version_constraint": "=0.2.0"},
-            {"package_id": "minimax.pptx-generator-skillset", "version_constraint": "=0.2.0"},
-        ],
-        "compatibility": {
-            "min_platform_version": "0.1.0",
-            "target_artifact_mode": ["native_pptx_first", "dual_render"],
-        },
-        "entrypoints": [
-            {
-                "kind": "workflow",
-                "target": "workflows/native-pptx-orchestrator",
-                "description": "以插件工作流取代 legacy HTML 大纲/逐页生成链。",
-            }
-        ],
-        "metadata": {
-            "release_date": "2026-03-30",
-            "release_notes": "新增版本审查与回滚感知编排，前端可直接展示一键升级和版本对比。",
-            "upgrade_notes": "升级后建议同步升级依赖包，并重新开启工作流以加载新编排节点。",
         },
     },
 )

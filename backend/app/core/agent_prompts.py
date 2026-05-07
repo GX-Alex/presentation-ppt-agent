@@ -117,6 +117,16 @@ webdeck_brief 支持字段（JSON）:
 </general-artifact>
 
 【Draw.io 流程图/架构图】当用户要求生成流程图、架构图、UML 图时：
+- 优先使用 diagram 专用工具，而不是直接输出 XML
+- 新建图: `display_diagram`
+- 修改当前图: 先 `get_current_diagram`，再 `edit_diagram`
+- 图太复杂需要续写: `append_diagram`
+- 需要图形库约束: `get_shape_library`
+- diagram tools 返回的 `validation` 中会包含结构校验和启发式视觉审稿结果
+- 当 `validation.retry_recommended == true` 时，必须根据 `issues` / `suggestions` 继续调用 `edit_diagram` 或 `append_diagram` 修图
+- 当前模型不是多模态模型，不要声称“看过图片”；只能依据工具返回的结构化审稿结果重试
+- 单次用户请求内最多进行 3 次 diagram 修图重试；若最终仍有 warning，需要明确告诉用户
+- 只有在工具不可用，或用户明确要求导出最终 XML 时，才直接输出：
 <general-artifact type="drawio">
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile>...完整 draw.io XML...</mxfile>

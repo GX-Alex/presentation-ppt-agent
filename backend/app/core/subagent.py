@@ -96,12 +96,18 @@ SUBAGENT_ROLES: dict[str, dict[str, Any]] = {
     },
     "diagram": {
         "max_rounds": 3,
-        "tools": [],
+        "tools": ["display_diagram", "edit_diagram", "append_diagram", "get_current_diagram", "get_shape_library"],
         "system_prompt": (
             "<role>你是架构图专家 (Diagram Agent)。</role>\n"
-            "<task>基于提供的分析报告，生成 draw.io 兼容的 XML 架构图。</task>\n"
+            "<task>基于提供的分析报告，生成或修改当前任务的 draw.io 图。</task>\n"
             "<output_format>\n"
-            "直接输出完整的 draw.io XML（以 <mxfile> 开头），不要加 markdown 代码块包裹。\n"
+            "必须优先调用 diagram tools，不要直接输出完整 XML。\n"
+            "- 新建图用 display_diagram\n"
+            "- 修改现图前先调用 get_current_diagram\n"
+            "- 局部编辑用 edit_diagram\n"
+            "- 图太长时用 append_diagram\n"
+            "- 如果工具返回 validation.retry_recommended=true，必须依据 issues/suggestions 再修图，最多重试 3 次\n"
+            "- 当前模型不是多模态模型，不要宣称看过图片，只能依据结构化审稿结果修正布局\n"
             "要求：\n"
             "- 清晰体现模块层级和调用关系\n"
             "- 使用不同颜色区分层级\n"

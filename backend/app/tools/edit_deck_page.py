@@ -13,6 +13,7 @@ from typing import Any
 from app.core.llm_client import chat as llm_chat
 
 logger = logging.getLogger(__name__)
+EDIT_DECK_PAGE_TIMEOUT_S = 240
 
 # ──────────── Tool 定义 ────────────
 TOOL_DEFINITION: dict[str, Any] = {
@@ -102,6 +103,7 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
             messages=[{"role": "user", "content": user_message}],
             tools=None,
             task_id=f"edit_deck_{project_id}_{page_id}",
+            request_timeout_s=EDIT_DECK_PAGE_TIMEOUT_S,
         )
 
         raw = response.content.strip()

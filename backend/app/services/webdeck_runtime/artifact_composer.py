@@ -4,6 +4,7 @@ Deck Composer — 最终组装器 (对齐 high.md §5.3.5 Deck Integrator)。
 生成: 路由、目录、主题、页面切换、进度条、URL 同步。
 """
 import logging
+import re
 from typing import Any
 
 from app.models.tables import DeckPage
@@ -11,12 +12,66 @@ from app.services.webdeck_runtime.contracts import DeckManifest, DeckShellConfig
 
 logger = logging.getLogger(__name__)
 
+_ECHARTS_CDN_SCRIPT_RE = re.compile(
+  r'<script[^>]+src=["\']https://cdn\.jsdelivr\.net/npm/echarts@5/dist/echarts\.min\.js["\'][^>]*>\s*</script>',
+  flags=re.IGNORECASE,
+)
+_ECHARTS_INIT_SCRIPT_RE = re.compile(
+  r'<script(?P<attrs>(?![^>]*\bsrc=)[^>]*)>(?P<body>[\s\S]*?echarts\.init\([\s\S]*?)</script>',
+  flags=re.IGNORECASE,
+)
+_CHART_READY_WRAPPER_PATTERNS = [
+  re.compile(
+    r'^\s*document\.addEventListener\(\s*["\']DOMContentLoaded["\']\s*,\s*function\s*\([^)]*\)\s*\{(?P<body>[\s\S]*?)\}\s*\)\s*;?\s*$',
+    flags=re.IGNORECASE,
+  ),
+  re.compile(
+    r'^\s*(?:document|window)\.addEventListener\(\s*["\'](?:DOMContentLoaded|load)["\']\s*,\s*\(?[^)]*\)?\s*=>\s*\{(?P<body>[\s\S]*?)\}\s*\)\s*;?\s*$',
+    flags=re.IGNORECASE,
+  ),
+  re.compile(
+    r'^\s*window\.onload\s*=\s*function\s*\([^)]*\)\s*\{(?P<body>[\s\S]*?)\}\s*;?\s*$',
+    flags=re.IGNORECASE,
+  ),
+]
+
 
 class DeckComposer:
     """
     Deck 组装器 — 将 PageBundle 集合组合成最终可独立部署的 Web Deck。
     对齐 high.md §5.3.5: 路由 + 目录 + 主题 + 页面切换 + 进度条 + URL state。
     """
+
+    @staticmethod
+    def _normalize_chart_init_body(script_body: str) -> str:
+      """展开 DOM ready / load 包装，保证延迟执行时 chart init 仍然真正运行。"""
+      normalized = (script_body or "").strip()
+
+      for _ in range(3):
+        next_body = normalized
+        for pattern in _CHART_READY_WRAPPER_PATTERNS:
+          match = pattern.match(normalized)
+          if match:
+            next_body = (match.group("body") or "").strip()
+            break
+        if next_body == normalized:
+          break
+        normalized = next_body
+
+      return normalized
+
+    @staticmethod
+    def _prepare_page_section(section_html: str) -> str:
+      """规范化页面片段中的 ECharts 脚本，避免隐藏页提前初始化与重复加载 runtime。"""
+      normalized = _ECHARTS_CDN_SCRIPT_RE.sub("", section_html)
+
+      def _replace_chart_init(match: re.Match[str]) -> str:
+        attrs = match.group("attrs") or ""
+        body = DeckComposer._normalize_chart_init_body(match.group("body") or "")
+        attrs = re.sub(r'\s+type=(["\']).*?\1', "", attrs, flags=re.IGNORECASE)
+        return f'<script type="application/webdeck-chart-init"{attrs}>{body}</script>'
+
+      return _ECHARTS_INIT_SCRIPT_RE.sub(_replace_chart_init, normalized)
 
     def compose(
         self,
@@ -41,16 +96,16 @@ class DeckComposer:
         # 收集所有页面的 HTML
         page_sections = []
         for page in pages:
-            if page.html:
-                page_sections.append(page.html)
-            else:
-                # 还没有生成的页面用占位符
-                page_sections.append(
-                    f'<section data-page-id="{page.page_id}" class="deck-page deck-page--empty">'
-                    f'<div style="display:flex;align-items:center;justify-content:center;'
-                    f'min-height:100vh;color:{theme.text_color};opacity:0.5;">'
-                    f'<p>{page.title or "加载中..."}</p></div></section>'
-                )
+          if page.html:
+            page_sections.append(self._prepare_page_section(page.html))
+          else:
+            # 还没有生成的页面用占位符
+            page_sections.append(
+              f'<section data-page-id="{page.page_id}" class="deck-page deck-page--empty">'
+              f'<div style="display:flex;align-items:center;justify-content:center;'
+              f'min-height:100vh;color:{theme.text_color};opacity:0.5;">'
+              f'<p>{page.title or "加载中..."}</p></div></section>'
+            )
 
         # 构建目录
         toc_items = []
@@ -116,6 +171,7 @@ class DeckComposer:
   <title>{title}</title>
   <!-- P1: Iconify 图标库 CDN -->
   <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <style>
     /* ── Reset ── */
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -340,8 +396,46 @@ class DeckComposer:
       stage.style.transform = 'translate(' + ox + 'px, ' + oy + 'px) scale(' + scale + ')';
     }}
 
-    function scaleAllSlides() {{
-      slides.forEach(function(s) {{ scaleSlide(s); }});
+    function runChartInitScripts(slide) {{
+      if (!slide || typeof window.echarts === 'undefined') return;
+      slide.querySelectorAll('script[type="application/webdeck-chart-init"]:not([data-webdeck-executed="true"])').forEach(function(script) {{
+        try {{
+          var run = new Function(script.textContent || '');
+          run();
+          script.setAttribute('data-webdeck-executed', 'true');
+        }} catch (error) {{
+          console.warn('[WebDeck] chart init failed', error);
+        }}
+      }});
+    }}
+
+    function refreshActiveCharts() {{
+      var activeSlide = slides[currentPage];
+      if (!activeSlide || !window.echarts || typeof window.echarts.getInstanceByDom !== 'function') return;
+
+      var nodes = activeSlide.querySelectorAll('[_echarts_instance_], .deck-chart-wrapper [id], [data-asset-kind="chart"][id]');
+      var visited = new Set();
+      nodes.forEach(function(node) {{
+        if (visited.has(node)) return;
+        visited.add(node);
+        try {{
+          var instance = window.echarts.getInstanceByDom(node);
+          if (instance) {{
+            instance.resize({{ animation: false }});
+          }}
+        }} catch (error) {{
+          console.warn('[WebDeck] chart refresh failed', error);
+        }}
+      }});
+    }}
+
+    function syncActiveSlide() {{
+      if (!slides[currentPage]) return;
+      scaleSlide(slides[currentPage]);
+      runChartInitScripts(slides[currentPage]);
+      refreshActiveCharts();
+      requestAnimationFrame(refreshActiveCharts);
+      window.setTimeout(refreshActiveCharts, 120);
     }}
 
     function goToPage(index) {{
@@ -349,7 +443,7 @@ class DeckComposer:
       slides[currentPage].classList.remove('active');
       currentPage = index;
       slides[currentPage].classList.add('active');
-      scaleSlide(slides[currentPage]);
+      syncActiveSlide();
       updateUI();
     }}
 
@@ -373,11 +467,11 @@ class DeckComposer:
     }});
 
     // 初始化
-    window.addEventListener('load', function() {{ scaleAllSlides(); updateUI(); }});
-    window.addEventListener('resize', scaleAllSlides);
-    // 两步初始化：立即尝试 + RAF 推迟确保布局完成后再缩放
-    scaleAllSlides();
-    requestAnimationFrame(function() {{ scaleAllSlides(); }});
+    window.addEventListener('load', function() {{ syncActiveSlide(); updateUI(); }});
+    window.addEventListener('resize', syncActiveSlide);
+    // 两步初始化：立即尝试 + RAF 推迟确保布局完成后再缩放/刷新图表
+    syncActiveSlide();
+    requestAnimationFrame(function() {{ syncActiveSlide(); }});
     updateUI();
   </script>
 </body>

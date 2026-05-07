@@ -105,7 +105,7 @@ export default function HomePage() {
       {/* Zen 留白标题区 */}
       <div className="text-center mb-10">
         <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3 tracking-tight">
-          General Agent
+          Presentation Agent
         </h1>
         <p className="text-gray-400 text-base">AI 驱动的智能工作平台 — PPT · 文档 · 研究</p>
       </div>

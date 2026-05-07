@@ -1,5 +1,5 @@
 """
-General Agent Platform — 后端入口
+Presentation Agent Platform — 后端入口
 """
 import logging
 import os
@@ -29,6 +29,8 @@ from app.api.memory import router as memory_router
 from app.api.packages import router as packages_router
 from app.api.presentations import router as presentations_router
 from app.api.webdeck import router as webdeck_router
+from app.api.diagram_sessions import router as diagram_sessions_router
+from app.api.diagram_validation import router as diagram_validation_router
 from app.ws.chat_handler import router as ws_router
 from app.models.database import async_session, init_db
 from app.core.tool_dispatch import auto_discover_tools
@@ -107,7 +109,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="General Agent Platform",
+    title="Presentation Agent Platform",
     version="0.1.0",
     description="通用智能体平台 — 一阶段聚焦 PPT/文档生成",
     lifespan=lifespan,
@@ -142,6 +144,8 @@ app.include_router(memory_router, prefix="/api")
 app.include_router(packages_router, prefix="/api")
 app.include_router(presentations_router, prefix="/api")
 app.include_router(webdeck_router, prefix="/api")
+app.include_router(diagram_sessions_router, prefix="/api")
+app.include_router(diagram_validation_router, prefix="/api")
 
 # WebSocket
 app.include_router(ws_router)

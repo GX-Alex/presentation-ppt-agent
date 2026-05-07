@@ -653,7 +653,9 @@ class PPTEventMiddleware(AgentMiddleware):
     ) -> None:
         """edit_deck_page 完成后保存 HTML 到 DeckPage 表并推送 webdeck_page_ready 事件。"""
         from app.services.webdeck_runtime.state_store import deck_state_store
+        from app.services.webdeck_runtime.publish_service import republish_project
         from app.services.webdeck_runtime.contracts import PageStatus
+        from app.services.webdeck_runtime.editor_bundle import build_page_bundle_payload
 
         project_id = tool_result.get("project_id", "")
         page_id = tool_result.get("page_id", "")
@@ -673,13 +675,46 @@ class PPTEventMiddleware(AgentMiddleware):
             )
             deck_page = result.scalar_one_or_none()
             if deck_page:
+                page_bundle = build_page_bundle_payload(
+                    page_id=page_id,
+                    html=new_html,
+                    base_payload=getattr(deck_page, "page_bundle", None) or {},
+                )
                 await deck_state_store.save_page_html(
                     ctx.session,
                     deck_page.id,
                     new_html,
-                    None,
+                    page_bundle,
                     status=PageStatus.COMPLETED.value,
                 )
+
+                page_version = await deck_state_store.create_page_version(
+                    session=ctx.session,
+                    project_id=project_id,
+                    page_db_id=deck_page.id,
+                    html=new_html,
+                    source="ai",
+                    change_summary=changes_summary,
+                    metadata={"tool": "edit_deck_page"},
+                )
+
+                publish = None
+                full_html = ""
+                try:
+                    publish, full_html = await republish_project(
+                        session=ctx.session,
+                        project_id=project_id,
+                        metadata={
+                            "source": "ai",
+                            "tool": "edit_deck_page",
+                            "page_id": page_id,
+                        },
+                    )
+                except Exception as publish_error:
+                    logger.warning(
+                        f"[PPTEventMiddleware] AI 编辑后重发布失败: {publish_error}"
+                    )
+
                 if ctx.send_fn:
                     await ctx.send_fn({
                         "type": "webdeck_page_ready",
@@ -688,9 +723,22 @@ class PPTEventMiddleware(AgentMiddleware):
                         "page_index": deck_page.page_index,
                         "title": deck_page.title or "",
                         "html": new_html,
+                        "page_bundle": page_bundle,
                         "status": "completed",
                         "changes_summary": changes_summary,
+                        "page_version": page_version.version,
                     })
+
+                    if publish and full_html:
+                        total_pages = len(await deck_state_store.get_pages(ctx.session, project_id))
+                        await ctx.send_fn({
+                            "type": "webdeck_complete",
+                            "project_id": project_id,
+                            "version": publish.version,
+                            "html": full_html,
+                            "page_count": total_pages,
+                            "source": "edit_deck_page",
+                        })
             else:
                 logger.warning(
                     f"[PPTEventMiddleware] edit_deck_page: DeckPage 未找到: "

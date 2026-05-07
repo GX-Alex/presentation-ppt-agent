@@ -29,6 +29,7 @@ from app.services.presentation_briefing_service import (
 from app.services.webdeck_runtime.contracts import (
     PageStatus, LaneKind, LaneStatus, PageKind, AssetNode, PageBundle, ReviewReport,
 )
+from app.services.webdeck_runtime.editor_bundle import hydrate_page_bundle
 from app.services.webdeck_runtime.state_store import deck_state_store
 from app.services.webdeck_runtime.lane_runner import LaneRunner
 from app.services.webdeck_runtime.reviewer import DeckReviewer
@@ -279,6 +280,7 @@ class PageOrchestrator:
                         "page_index": page.page_index,
                         "title": page.title,
                         "html": bundle.html,
+                        "page_bundle": bundle.to_dict(),
                         "status": "completed",
                     })
 
@@ -320,6 +322,8 @@ class PageOrchestrator:
                     )
                     final_bundle = self._apply_overflow_css_fix(final_bundle)
 
+            final_bundle = hydrate_page_bundle(final_bundle)
+
             logger.warning(
                 f"[PageOrch] 审稿 {MAX_PAGE_REVIEW_RETRIES + 1} 次未通过，接受最终稿: "
                 f"page_id={page.page_id}, best_score={best_score:.2f}"
@@ -335,6 +339,7 @@ class PageOrchestrator:
                 "page_index": page.page_index,
                 "title": page.title,
                 "html": final_bundle.html,
+                "page_bundle": final_bundle.to_dict(),
                 "status": "completed",
             })
             return final_bundle
@@ -384,8 +389,11 @@ class PageOrchestrator:
         revision_guidance: str = "",
         cancellation_token: CancellationToken | None = None,
     ) -> PageBundle:
+        def _hydrate(bundle: PageBundle) -> PageBundle:
+            return hydrate_page_bundle(bundle)
+
         if (page.page_kind or "content") in HIGH_VALUE_PAGE_KINDS:
-            return await self._generate_with_lanes(
+            return _hydrate(await self._generate_with_lanes(
                 session,
                 page,
                 project_id,
@@ -394,9 +402,9 @@ class PageOrchestrator:
                 model,
                 revision_guidance,
                 cancellation_token=cancellation_token,
-            )
+            ))
 
-        return await self._generate_simple(
+        return _hydrate(await self._generate_simple(
             session,
             page,
             project_id,
@@ -405,7 +413,7 @@ class PageOrchestrator:
             model,
             revision_guidance,
             cancellation_token=cancellation_token,
-        )
+        ))
 
     async def _generate_simple(
         self,

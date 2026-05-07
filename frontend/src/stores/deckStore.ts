@@ -9,12 +9,12 @@ import { create } from "zustand";
 
 /** Deck 项目状态枚举 */
 export type DeckStatus =
-  | "planning"     // 规划中
-  | "plan_ready"   // 规划完成，等待用户确认
-  | "generating"   // 生成中
-  | "reviewing"    // 审阅中
-  | "completed"    // 完成
-  | "failed";      // 失败
+  | "planning"
+  | "plan_ready"
+  | "generating"
+  | "reviewing"
+  | "completed"
+  | "failed";
 
 /** 页面状态枚举 */
 export type PageStatus = "pending" | "running" | "done" | "failed";
@@ -65,6 +65,57 @@ export interface LaneRunInfo {
   error?: string;
 }
 
+export interface DeckBundleArtifact {
+  assetId: string;
+  kind: string;
+  content?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DeckEditableNode {
+  nodeId: string;
+  nodeKind: string;
+  tagName: string;
+  text: string;
+  selectorHint: string;
+  layoutScopeId?: string;
+  editable: boolean;
+}
+
+export interface DeckLayoutScope {
+  scopeId: string;
+  scopeKind: string;
+  tagName: string;
+  label: string;
+  moduleNodeIds: string[];
+  allowedOps: string[];
+  parameters?: Record<string, unknown>;
+}
+
+export interface DeckAssetManifestItem {
+  assetId: string;
+  kind: string;
+  label: string;
+  editableVia: string;
+  bindingNodeId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DeckPageBundle {
+  pageId?: string;
+  status?: string;
+  html?: string;
+  cssTokens?: Record<string, unknown>;
+  jsModules?: string[];
+  artifacts?: DeckBundleArtifact[];
+  editorSchemaVersion?: string;
+  editableModel?: DeckEditableNode[];
+  layoutModel?: DeckLayoutScope[];
+  assetManifest?: DeckAssetManifestItem[];
+  renderHints?: Record<string, unknown>;
+  review?: Record<string, unknown> | null;
+}
+
 /** 页面数据 */
 export interface DeckPageData {
   id: string;
@@ -73,6 +124,7 @@ export interface DeckPageData {
   kind: PageKind;
   status: PageStatus;
   html?: string;
+  pageBundle?: DeckPageBundle;
   lanes: LaneRunInfo[];
 }
 
@@ -91,82 +143,79 @@ export interface ReviewReport {
   retrying?: boolean;
 }
 
+/** 页面版本快照 */
+export interface DeckPageVersion {
+  version: number;
+  source: string;
+  changeSummary?: string;
+  createdAt?: string;
+}
+
 // ── Store 接口 ──
 
 interface DeckStore {
-  // 项目信息
   projectId: string | null;
   deckStatus: DeckStatus | null;
   manifest: DeckManifest | null;
-
-  // 视图状态
   isTocCollapsed: boolean;
-
-  // 页面列表
   pages: DeckPageData[];
   currentPageIndex: number;
-
-  // 最终 HTML
+  isEditorMode: boolean;
+  draftHtmlByPageId: Record<string, string>;
+  pageVersionsByPageId: Record<string, DeckPageVersion[]>;
+  selectedNodeIdByPageId: Record<string, string | null>;
+  hoveredNodeIdByPageId: Record<string, string | null>;
+  isSavingPage: boolean;
+  isLoadingVersions: boolean;
   finalHtml: string | null;
-
-  // 审阅报告
   reviews: ReviewReport[];
-
-  // 进度
   generatingCurrent: number;
   generatingTotal: number;
 
-  // ── Actions ──
-
-  /** 设置项目 ID */
   setProjectId: (id: string) => void;
-  /** 设置 Deck 状态 */
   setDeckStatus: (status: DeckStatus) => void;
-  /** 设置 manifest（规划结果） */
   setManifest: (manifest: DeckManifest) => void;
-
-  /** 初始化页面列表（从 manifest 创建空页面） */
   initPages: (pages: DeckPageData[]) => void;
-  /** 更新单页状态 */
   updatePageStatus: (pageId: string, status: PageStatus) => void;
-  /** 更新单页 HTML */
-  updatePageHtml: (pageId: string, html: string) => void;
-  /** 更新 lane 状态 */
+  updatePageHtml: (pageId: string, html: string, pageBundle?: DeckPageBundle) => void;
+  updatePageBundle: (pageId: string, pageBundle: DeckPageBundle) => void;
   updateLaneStatus: (pageId: string, laneId: string, status: LaneStatus, laneKind?: LaneKind, output?: string, error?: string) => void;
-  /** 设置当前预览页 */
   setCurrentPageIndex: (index: number) => void;
-  /** 设置 TOC 是否收起 */
   setTocCollapsed: (collapsed: boolean) => void;
-  /** 切换 TOC 收起状态 */
   toggleTocCollapsed: () => void;
-
-  /** 设置最终 HTML */
+  setEditorMode: (enabled: boolean) => void;
+  setPageDraft: (pageId: string, html: string) => void;
+  clearPageDraft: (pageId: string) => void;
+  setPageVersions: (pageId: string, versions: DeckPageVersion[]) => void;
+  setSelectedNodeId: (pageId: string, nodeId: string | null) => void;
+  setHoveredNodeId: (pageId: string, nodeId: string | null) => void;
+  setSavingPage: (saving: boolean) => void;
+  setLoadingVersions: (loading: boolean) => void;
   setFinalHtml: (html: string) => void;
-
-  /** 添加审阅报告 */
   addReview: (review: ReviewReport) => void;
-
-  /** 设置生成进度 */
   setGeneratingProgress: (current: number, total: number) => void;
-
-  /** 重置所有状态（新项目时调用） */
   resetDeck: () => void;
 }
 
 export const useDeckStore = create<DeckStore>((set) => ({
-  // 初始状态
   projectId: null,
   deckStatus: null,
   manifest: null,
   isTocCollapsed: false,
   pages: [],
   currentPageIndex: 0,
+  isEditorMode: false,
+  draftHtmlByPageId: {},
+  pageVersionsByPageId: {},
+  selectedNodeIdByPageId: {},
+  hoveredNodeIdByPageId: {},
+  isSavingPage: false,
+  isLoadingVersions: false,
   finalHtml: null,
   reviews: [],
   generatingCurrent: 0,
   generatingTotal: 0,
 
-  // Actions
   setProjectId: (id) => set({ projectId: id }),
 
   setDeckStatus: (status) => set({ deckStatus: status }),
@@ -178,12 +227,15 @@ export const useDeckStore = create<DeckStore>((set) => ({
       const mergedPages = pages
         .map((page) => {
           const existing = state.pages.find((item) => item.id === page.id);
-          if (!existing) return page;
+          if (!existing) {
+            return page;
+          }
 
           return {
             ...page,
             status: existing.status === "pending" ? page.status : existing.status,
             html: existing.html || page.html,
+            pageBundle: page.pageBundle || existing.pageBundle,
             lanes: existing.lanes.length > 0 ? existing.lanes : page.lanes,
           };
         })
@@ -199,32 +251,52 @@ export const useDeckStore = create<DeckStore>((set) => ({
 
   updatePageStatus: (pageId, status) =>
     set((state) => ({
-      pages: state.pages.map((p) =>
-        p.id === pageId ? { ...p, status } : p
+      pages: state.pages.map((page) =>
+        page.id === pageId ? { ...page, status } : page
       ),
     })),
 
-  updatePageHtml: (pageId, html) =>
+  updatePageHtml: (pageId, html, pageBundle) =>
     set((state) => ({
-      pages: state.pages.map((p) =>
-        p.id === pageId ? { ...p, html, status: "done" as PageStatus } : p
+      pages: state.pages.map((page) =>
+        page.id === pageId
+          ? {
+              ...page,
+              html,
+              pageBundle: pageBundle || page.pageBundle,
+              status: "done" as PageStatus,
+            }
+          : page
+      ),
+      draftHtmlByPageId: {
+        ...state.draftHtmlByPageId,
+        [pageId]: html,
+      },
+    })),
+
+  updatePageBundle: (pageId, pageBundle) =>
+    set((state) => ({
+      pages: state.pages.map((page) =>
+        page.id === pageId ? { ...page, pageBundle } : page
       ),
     })),
 
   updateLaneStatus: (pageId, laneId, status, laneKind, output, error) =>
     set((state) => ({
-      pages: state.pages.map((p) => {
-        if (p.id !== pageId) return p;
+      pages: state.pages.map((page) => {
+        if (page.id !== pageId) {
+          return page;
+        }
 
-        const existingLane = p.lanes.find((lane) => lane.id === laneId);
+        const existingLane = page.lanes.find((lane) => lane.id === laneId);
         const lanes = existingLane
-          ? p.lanes.map((lane) =>
+          ? page.lanes.map((lane) =>
               lane.id === laneId
                 ? { ...lane, status, laneKind: laneKind || lane.laneKind, output, error }
                 : lane
             )
           : [
-              ...p.lanes,
+              ...page.lanes,
               {
                 id: laneId,
                 laneKind: laneKind || "narrative",
@@ -235,7 +307,7 @@ export const useDeckStore = create<DeckStore>((set) => ({
             ];
 
         return {
-          ...p,
+          ...page,
           lanes,
         };
       }),
@@ -252,6 +324,51 @@ export const useDeckStore = create<DeckStore>((set) => ({
 
   toggleTocCollapsed: () =>
     set((state) => ({ isTocCollapsed: !state.isTocCollapsed })),
+
+  setEditorMode: (enabled) => set({ isEditorMode: enabled }),
+
+  setPageDraft: (pageId, html) =>
+    set((state) => ({
+      draftHtmlByPageId: {
+        ...state.draftHtmlByPageId,
+        [pageId]: html,
+      },
+    })),
+
+  clearPageDraft: (pageId) =>
+    set((state) => {
+      const next = { ...state.draftHtmlByPageId };
+      delete next[pageId];
+      return { draftHtmlByPageId: next };
+    }),
+
+  setPageVersions: (pageId, versions) =>
+    set((state) => ({
+      pageVersionsByPageId: {
+        ...state.pageVersionsByPageId,
+        [pageId]: versions,
+      },
+    })),
+
+  setSelectedNodeId: (pageId, nodeId) =>
+    set((state) => ({
+      selectedNodeIdByPageId: {
+        ...state.selectedNodeIdByPageId,
+        [pageId]: nodeId,
+      },
+    })),
+
+  setHoveredNodeId: (pageId, nodeId) =>
+    set((state) => ({
+      hoveredNodeIdByPageId: {
+        ...state.hoveredNodeIdByPageId,
+        [pageId]: nodeId,
+      },
+    })),
+
+  setSavingPage: (saving) => set({ isSavingPage: saving }),
+
+  setLoadingVersions: (loading) => set({ isLoadingVersions: loading }),
 
   setFinalHtml: (html) => set({ finalHtml: html }),
 
@@ -279,6 +396,13 @@ export const useDeckStore = create<DeckStore>((set) => ({
       isTocCollapsed: false,
       pages: [],
       currentPageIndex: 0,
+      isEditorMode: false,
+      draftHtmlByPageId: {},
+      pageVersionsByPageId: {},
+      selectedNodeIdByPageId: {},
+      hoveredNodeIdByPageId: {},
+      isSavingPage: false,
+      isLoadingVersions: false,
       finalHtml: null,
       reviews: [],
       generatingCurrent: 0,

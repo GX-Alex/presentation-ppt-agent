@@ -70,6 +70,13 @@ TOOL_RESULT_CHAR_LIMITS: dict[str, int] = {
     "save_to_memory":    200,
     "load_skill":        400,
 }
+DIAGRAM_CONTEXT_TOOLS = {
+    "display_diagram",
+    "edit_diagram",
+    "append_diagram",
+    "get_current_diagram",
+    "get_shape_library",
+}
 
 # ────────────── 消息重要性评分参数 ──────────────
 # 角色基础分: 不同角色消息的固有重要性
@@ -498,11 +505,12 @@ def _build_messages(history: list) -> list[dict[str, Any]]:
     - 最近 RECENT_MESSAGES_WINDOW 条消息: 不截断 tool result
     - 较旧消息: 按消息重要性 + 工具类型差异化截断
     """
+    visible_history = [msg for msg in history if getattr(msg, "msg_type", None) != "diagram_session"]
     messages = []
-    recent_start = max(len(history) - RECENT_MESSAGES_WINDOW, 0)
-    total = len(history)
+    recent_start = max(len(visible_history) - RECENT_MESSAGES_WINDOW, 0)
+    total = len(visible_history)
 
-    for index, msg in enumerate(history):
+    for index, msg in enumerate(visible_history):
         if msg.role == "assistant" and msg.msg_type == "tool_calls":
             # 重建 assistant tool_calls 消息
             try:
@@ -535,7 +543,7 @@ def _build_messages(history: list) -> list[dict[str, Any]]:
                 tool_call_id = msg.tool_input.get("_tool_call_id", "")
             if not tool_call_id:
                 tool_call_id = f"call_{msg.id}"  # 兜底: 生成一个
-            content = msg.content or ""
+            content = _slim_historical_diagram_tool_result(msg.content or "", msg.tool_name)
             # 智能截断: 仅对旧消息截断，且按工具类型区分保留长度
             if index < recent_start and msg.msg_type == "tool_result":
                 importance = _score_message_importance(msg, index, total)
@@ -664,6 +672,92 @@ def _truncate_tool_result(content: str, tool_name: str | None = None) -> str:
     return content[:limit] + "...已截断"
 
 
+def _slim_historical_diagram_tool_result(content: str, tool_name: str | None) -> str:
+    if tool_name not in DIAGRAM_CONTEXT_TOOLS or not content:
+        return content
+
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return content
+
+    if not isinstance(payload, dict):
+        return content
+
+    slim: dict[str, Any] = {
+        key: payload[key]
+        for key in ("ok", "error", "has_diagram", "retry_recommended", "blocked", "timeout", "tool")
+        if key in payload
+    }
+
+    diagram_session = payload.get("diagram_session")
+    if isinstance(diagram_session, dict):
+        slim["diagram_session"] = {
+            key: diagram_session[key]
+            for key in ("session_id", "task_id", "version", "summary", "source", "created_at")
+            if key in diagram_session
+        }
+        validation = diagram_session.get("validation")
+        if isinstance(validation, dict):
+            slim["diagram_session"]["validation"] = {
+                key: validation[key]
+                for key in (
+                    "valid",
+                    "fixed",
+                    "fixes",
+                    "warnings",
+                    "error",
+                    "review_passed",
+                    "review_mode",
+                    "retry_recommended",
+                    "retry_count",
+                    "max_retries",
+                    "score",
+                    "critical_count",
+                    "warning_count",
+                    "snapshot_source",
+                    "updated_at",
+                )
+                if key in validation
+            }
+
+    validation = payload.get("validation")
+    if isinstance(validation, dict):
+        slim["validation"] = {
+            key: validation[key]
+            for key in (
+                "valid",
+                "fixed",
+                "fixes",
+                "warnings",
+                "error",
+                "review_passed",
+                "review_mode",
+                "retry_recommended",
+                "retry_count",
+                "max_retries",
+                "score",
+                "critical_count",
+                "warning_count",
+                "snapshot_source",
+                "updated_at",
+            )
+            if key in validation
+        }
+
+    apply_result = payload.get("apply_result")
+    if isinstance(apply_result, dict):
+        slim["apply_result"] = {
+            key: apply_result[key]
+            for key in ("success", "operations_applied", "errors", "warnings")
+            if key in apply_result
+        }
+
+    if not slim:
+        return content
+    return json.dumps(slim, ensure_ascii=False)
+
+
 def _score_message_importance(
     msg,
     index: int,
@@ -708,6 +802,8 @@ def _score_message_importance(
 def _build_summary_input(messages: list[TaskMessage]) -> str:
     summary_input = []
     for msg in messages:
+        if getattr(msg, "msg_type", None) == "diagram_session":
+            continue
         role = msg.role
         content = (msg.content or "")[:500]
         if msg.tool_name:

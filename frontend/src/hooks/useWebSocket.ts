@@ -11,10 +11,12 @@
 
 import { useEffect, useCallback } from "react";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
+import { useDiagramStore } from "@/stores/diagramStore";
 import {
   useDeckStore,
 } from "@/stores/deckStore";
 import { parseWorkspaceArtifact } from "@/lib/artifacts";
+import type { DiagramSessionPayload } from "@/lib/diagramWsProtocol";
 import {
   type WebDeckGenerateBrief,
 } from "@/lib/qualityGeneration";
@@ -22,6 +24,7 @@ import {
   buildShellPagesFromManifest,
   formatWebDeckManifestSummary,
   mapManifest,
+  normalizePageBundle,
   normalizeDeckStatus,
   normalizeLaneKind,
   normalizeLaneStatus,
@@ -80,6 +83,18 @@ function _finishTaskProcessing(taskId?: string): void {
     return;
   }
   store.setIsProcessing(false);
+}
+
+function _readDiagramSession(data: Record<string, unknown>): DiagramSessionPayload | null {
+  const session = data.session;
+  if (!session || typeof session !== "object") {
+    return null;
+  }
+  const payload = session as Record<string, unknown>;
+  if (typeof payload.xml !== "string" || typeof payload.task_id !== "string") {
+    return null;
+  }
+  return payload as unknown as DiagramSessionPayload;
 }
 
 // ── 模块级单例状态（不随组件卸载而销毁） ──
@@ -265,6 +280,17 @@ function _handleMessage(event: MessageEvent): void {
       break;
     }
 
+    case "diagram_load":
+    case "diagram_session_synced": {
+      if (!matchesCurrentTask) break;
+      const session = _readDiagramSession(data);
+      if (!session) break;
+      useDiagramStore.getState().hydrateSession(session);
+      store.setCurrentArtifactType("drawio");
+      store.setArtifactContent(session.xml);
+      break;
+    }
+
     case "thinking": {
       if (!matchesCurrentTask) break;
       store.addMessage({
@@ -390,6 +416,7 @@ function _handleMessage(event: MessageEvent): void {
           title: (page.title as string) || `第 ${index + 1} 页`,
           kind: normalizePageKind(page.kind as string | undefined),
           status: normalizePageStatus(page.status as string | undefined),
+          pageBundle: normalizePageBundle(page.page_bundle as Record<string, unknown> | undefined),
           lanes: [],
         }))
       );
@@ -426,7 +453,11 @@ function _handleMessage(event: MessageEvent): void {
         if (status === "failed") {
           deckStore.updatePageStatus(pageId, "failed");
         } else {
-          deckStore.updatePageHtml(pageId, html);
+          deckStore.updatePageHtml(
+            pageId,
+            html,
+            normalizePageBundle(data.page_bundle as Record<string, unknown> | undefined),
+          );
         }
       }
 
@@ -792,6 +823,7 @@ function _initWebSocket(): void {
 
 interface UseWebSocketReturn {
   sendChat: (content: string, taskId?: string) => void;
+  sendDiagramAutosave: (xml: string, taskId?: string, extras?: { svg?: string | null; png?: string | null }) => void;
   sendWebDeckGenerate: (brief: WebDeckGenerateBrief, taskId?: string) => void;
   sendWebDeckApprove: (projectId: string, taskId?: string) => void;
   sendWebDeckRetryPage: (projectId: string, pageId: string, taskId?: string) => void;
@@ -838,6 +870,28 @@ export function useWebSocket(): UseWebSocketReturn {
       }
 
       _ws.send(payload);
+    },
+    []
+  );
+
+  const sendDiagramAutosave = useCallback(
+    (xml: string, taskId?: string, extras?: { svg?: string | null; png?: string | null }) => {
+      const scopedTaskId = taskId || useChatStore.getState().taskId || undefined;
+      useDiagramStore.getState().updateXml(xml, { syncStatus: _ws?.readyState === WebSocket.OPEN ? "dirty" : "error" });
+      if (!_ws || _ws.readyState !== WebSocket.OPEN) {
+        console.warn("[WS] 连接未就绪，diagram autosave 仅保留在本地状态");
+        return;
+      }
+
+      _ws.send(
+        JSON.stringify({
+          type: "diagram_autosave",
+          task_id: scopedTaskId || "new",
+          xml,
+          svg: extras?.svg || undefined,
+          png: extras?.png || undefined,
+        })
+      );
     },
     []
   );
@@ -962,6 +1016,7 @@ export function useWebSocket(): UseWebSocketReturn {
 
   return {
     sendChat,
+    sendDiagramAutosave,
     sendWebDeckGenerate,
     sendWebDeckApprove,
     sendWebDeckRetryPage,

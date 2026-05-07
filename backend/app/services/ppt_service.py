@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.schemas.deck_spec import DeckSpec
 from app.models.tables import Presentation, Slide, SlideVersion
 from app.services.deckspec_preview_service import render_deck_to_html_preview
-from app.services.native_renderer_service import build_deckspec_from_slides
+from app.services.deckspec_semantic_adapter import build_deckspec_from_slides
 from app.services.theme_manager import get_theme
 
 logger = logging.getLogger(__name__)

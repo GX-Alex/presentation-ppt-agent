@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# General Agent — 停止脚本
+# Presentation Agent — 停止脚本
 #
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "停止 General Agent 服务..."
+echo "停止 Presentation Agent 服务..."
 
 # 读取 PID 并杀死进程
 for svc in backend frontend; do

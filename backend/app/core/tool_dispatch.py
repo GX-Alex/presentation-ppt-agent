@@ -26,6 +26,7 @@ class ToolCategory:
     """工具类别常量。"""
     RESEARCH = "research"          # 研究类: web_search, fetch_url, parse_document
     PPT = "ppt"                    # PPT/Deck类: generate_ppt_deck, edit_slide, generate_slide, generate_outline
+    DIAGRAM = "diagram"            # Draw.io/流程图类: display_diagram, edit_diagram, append_diagram
     CODE_ANALYSIS = "code"         # 代码分析类: parse_project, read_project_file
     MEMORY = "memory"              # 记忆类: save_to_memory, search_memory
     MEDIA = "media"                # 媒体类: image_search
@@ -42,6 +43,11 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
     "image_search":      [ToolCategory.MEDIA, ToolCategory.RESEARCH],
     "edit_deck_page":             [ToolCategory.PPT],
     "retry_failed_deck_pages":    [ToolCategory.PPT],
+    "display_diagram":   [ToolCategory.DIAGRAM],
+    "edit_diagram":      [ToolCategory.DIAGRAM],
+    "append_diagram":    [ToolCategory.DIAGRAM],
+    "get_current_diagram": [ToolCategory.DIAGRAM],
+    "get_shape_library": [ToolCategory.DIAGRAM],
     "save_to_memory":    [ToolCategory.MEMORY, ToolCategory.UNIVERSAL],
     "search_memory":     [ToolCategory.MEMORY, ToolCategory.UNIVERSAL],
     "load_skill":        [ToolCategory.UTILITY, ToolCategory.UNIVERSAL],
@@ -51,10 +57,10 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
 
 # 意图 → 允许的工具类别映射
 INTENT_ALLOWED_CATEGORIES: dict[str, set[str]] = {
-    "research":      {ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL, ToolCategory.MEDIA},
-    "ppt":           {ToolCategory.PPT, ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL, ToolCategory.MEDIA},
-    "code_analysis": {ToolCategory.CODE_ANALYSIS, ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL},
-    "chat":          {ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL},
+    "research":      {ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL, ToolCategory.MEDIA, ToolCategory.DIAGRAM},
+    "ppt":           {ToolCategory.PPT, ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL, ToolCategory.MEDIA, ToolCategory.DIAGRAM},
+    "code_analysis": {ToolCategory.CODE_ANALYSIS, ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL, ToolCategory.DIAGRAM},
+    "chat":          {ToolCategory.RESEARCH, ToolCategory.MEMORY, ToolCategory.UTILITY, ToolCategory.UNIVERSAL, ToolCategory.DIAGRAM},
     "composite":     None,  # None 表示所有类别都允许
 }
 
@@ -103,6 +109,13 @@ DEFAULT_TOOL_RUNTIME_METADATA: dict[str, Any] = {
     "expose_to_llm": True,
     "status": "stable",
     "replacement": None,
+}
+
+TOOL_TIMEOUT_OVERRIDES: dict[str, float] = {
+    "dispatch_subagent": 300.0,
+    "run_code": 240.0,
+    "edit_deck_page": 240.0,
+    "regenerate_deck_page": 420.0,
 }
 
 # ────────────── Tool Middleware ──────────────
@@ -228,14 +241,7 @@ async def dispatch(
             except Exception as e:
                 logger.warning(f"Pre-hook error for {tool_name}: {e}")
 
-        # dispatch_subagent 需要更长超时 (内部子 agent 超时 240s + 开销)
-        # run_code 可能需要 npm install (~120s) + 脚本执行 (~90s)
-        if tool_name == "dispatch_subagent":
-            tool_timeout = 300.0
-        elif tool_name == "run_code":
-            tool_timeout = 240.0
-        else:
-            tool_timeout = 60.0
+        tool_timeout = TOOL_TIMEOUT_OVERRIDES.get(tool_name, 60.0)
 
         try:
             try:

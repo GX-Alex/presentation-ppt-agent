@@ -27,6 +27,9 @@ from app.models.database import async_session
 from app.models.tables import Task, TaskMessage, User
 from app.core.agent_runner import agent_loop_v2 as agent_loop
 from app.services.context_service import handle_compact_command
+from app.services.diagram_session_service import get_latest_diagram_session, persist_diagram_session, snapshot_to_wire
+from app.services.diagram_visual_review_service import build_validation_payload, next_retry_count, review_diagram_snapshot
+from app.services.diagram_xml_validator import validate_and_fix_xml
 from app.services.webdeck_runtime.director import DeckDirector
 from app.services.presentation_briefing_service import collect_task_attachments
 from app.services.webdeck_runtime.state_store import deck_state_store
@@ -717,6 +720,67 @@ async def websocket_chat(websocket: WebSocket):
                 else:
                     await _cancel_all_runtime_tasks()
                     await safe_send({"type": "processing_done"})
+
+            elif msg_type == "diagram_autosave":
+                xml = str(message.get("xml") or "").strip()
+                if not xml:
+                    await safe_send({
+                        "type": "error",
+                        "message": "diagram_autosave 缺少 xml",
+                        "recoverable": True,
+                    })
+                    continue
+
+                actual_task_id, user_id, title, status = await _resolve_task_scope(message.get("task_id"))
+                await safe_send({
+                    "type": "task_info",
+                    "task_id": actual_task_id,
+                    "title": title,
+                    "status": status,
+                })
+
+                validation = validate_and_fix_xml(xml, allow_fragment=True)
+                if not validation.valid:
+                    await safe_send({
+                        "type": "error",
+                        "message": validation.error or "draw.io XML 无效",
+                        "recoverable": True,
+                        "task_id": actual_task_id,
+                    })
+                    continue
+
+                async with async_session() as session:
+                    latest = await get_latest_diagram_session(session, actual_task_id)
+                    retry_count = next_retry_count(
+                        latest.validation if latest else None,
+                        previous_xml=latest.xml if latest else None,
+                        current_xml=validation.xml,
+                    )
+                    review = review_diagram_snapshot(
+                        xml=validation.xml,
+                        svg=str(message.get("svg") or "").strip() or None,
+                        png=str(message.get("png") or "").strip() or None,
+                    )
+                    reviewed_validation = build_validation_payload(
+                        validation,
+                        review_result=review,
+                        retry_count=retry_count,
+                    )
+                    snapshot = await persist_diagram_session(
+                        session,
+                        task_id=actual_task_id,
+                        xml=validation.xml,
+                        source="diagram_autosave",
+                        svg=str(message.get("svg") or "").strip() or None,
+                        png=str(message.get("png") or "").strip() or None,
+                        validation=reviewed_validation,
+                    )
+
+                await safe_send({
+                    "type": "diagram_session_synced",
+                    "task_id": actual_task_id,
+                    "session": snapshot_to_wire(snapshot),
+                })
 
             elif msg_type == "mode":
                 mode = message.get("value", "direct")

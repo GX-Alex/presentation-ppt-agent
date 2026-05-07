@@ -901,7 +901,7 @@ export function MessageList({ onSend, onOpenQualityDialog, isLoading }: { onSend
           <div className="w-16 h-16 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-4">
             <span className="text-3xl">🤖</span>
           </div>
-          <p className="text-sm font-medium text-gray-600 mb-1">你好！我是 General Agent</p>
+          <p className="text-sm font-medium text-gray-600 mb-1">你好！我是 Presentation Agent</p>
           <p className="text-sm text-gray-400">发一条消息开始对话</p>
         </div>
       </div>

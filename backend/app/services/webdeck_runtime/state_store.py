@@ -8,12 +8,12 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tables import (
     DeckProject, DeckPage, DeckVersion, LaneRun,
-    DeckAssetNode, DeckReviewReport, DeckPublish,
+    DeckAssetNode, DeckReviewReport, DeckPublish, DeckPageVersion,
 )
 from app.services.webdeck_runtime.contracts import (
     DeckManifest, DeckStatus, PageStatus, LaneStatus,
@@ -180,6 +180,21 @@ class DeckStateStore:
             select(DeckPage)
             .execution_options(populate_existing=True)
             .where(DeckPage.id == page_db_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_page_by_page_id(
+        self,
+        session: AsyncSession,
+        project_id: str,
+        page_id: str,
+    ) -> DeckPage | None:
+        """根据 project_id + page_id 获取页面"""
+        result = await session.execute(
+            select(DeckPage)
+            .execution_options(populate_existing=True)
+            .where(DeckPage.project_id == project_id)
+            .where(DeckPage.page_id == page_id)
         )
         return result.scalar_one_or_none()
 
@@ -363,6 +378,68 @@ class DeckStateStore:
         await session.commit()
         await session.refresh(ver)
         return ver
+
+    async def create_page_version(
+        self,
+        session: AsyncSession,
+        project_id: str,
+        page_db_id: str,
+        html: str,
+        source: str = "manual",
+        change_summary: str | None = None,
+        metadata: dict | None = None,
+    ) -> DeckPageVersion:
+        """创建单页 HTML 版本快照。"""
+        max_version_result = await session.execute(
+            select(func.max(DeckPageVersion.version)).where(
+                DeckPageVersion.page_db_id == page_db_id
+            )
+        )
+        next_version = int(max_version_result.scalar() or 0) + 1
+
+        page_version = DeckPageVersion(
+            project_id=project_id,
+            page_db_id=page_db_id,
+            version=next_version,
+            source=source,
+            html=html,
+            change_summary=change_summary,
+            metadata_=metadata or {},
+        )
+        session.add(page_version)
+        await session.commit()
+        await session.refresh(page_version)
+        return page_version
+
+    async def list_page_versions(
+        self,
+        session: AsyncSession,
+        page_db_id: str,
+        limit: int = 20,
+    ) -> list[DeckPageVersion]:
+        """按版本号倒序获取页面版本历史。"""
+        stmt = (
+            select(DeckPageVersion)
+            .where(DeckPageVersion.page_db_id == page_db_id)
+            .order_by(DeckPageVersion.version.desc(), DeckPageVersion.created_at.desc())
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_page_version_by_number(
+        self,
+        session: AsyncSession,
+        page_db_id: str,
+        version: int,
+    ) -> DeckPageVersion | None:
+        """根据页面数据库 ID + 版本号获取版本快照。"""
+        result = await session.execute(
+            select(DeckPageVersion)
+            .where(DeckPageVersion.page_db_id == page_db_id)
+            .where(DeckPageVersion.version == version)
+        )
+        return result.scalar_one_or_none()
 
     # ────────────── 发布 ──────────────
 

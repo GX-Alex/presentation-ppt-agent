@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
 import { useDeckStore } from "@/stores/deckStore";
+import { useDiagramStore } from "@/stores/diagramStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { findLatestWorkspaceArtifact, parseWorkspaceArtifact } from "@/lib/artifacts";
 import {
@@ -19,6 +20,7 @@ import {
   formatWebDeckManifestSummary,
   mapManifest,
   mapSummaryPages,
+  normalizePageBundle,
   normalizeDeckStatus,
 } from "@/lib/webdeck";
 import { MessageList } from "./MessageList";
@@ -45,6 +47,8 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
   const resetPpt = useChatStore((s) => s.resetPpt);
   const isProcessing = useChatStore((s) => s.isProcessing);
   const resetDeck = useDeckStore((s) => s.resetDeck);
+  const hydrateDiagramSession = useDiagramStore((s) => s.hydrateSession);
+  const resetDiagram = useDiagramStore((s) => s.resetDiagram);
   const setProjectId = useDeckStore((s) => s.setProjectId);
   const setDeckStatus = useDeckStore((s) => s.setDeckStatus);
   const setManifest = useDeckStore((s) => s.setManifest);
@@ -59,6 +63,7 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
     clearMessages();
     resetPpt();
     resetDeck();
+    resetDiagram();
     setCurrentArtifactType("none");
     setArtifactContent(null);
     setLoadError(false);
@@ -143,7 +148,7 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
           const manifestPayload = manifestResp.ok ? await manifestResp.json() : null;
           const pagesPayload = pagesResp.ok ? await pagesResp.json() : [];
           const htmlPayload = htmlResp.ok ? await htmlResp.json() : null;
-          const reviewsPayload: Array<{ level: string; targetId: string; passed: boolean; score: number; issues: Array<{ level: string; message: string; suggestion?: string }>; suggestions: string[] }> = reviewsResp.ok ? await reviewsResp.json() : [];
+          const reviewsPayload: Array<{ level: "page" | "deck"; targetId: string; passed: boolean; score: number; issues: Array<{ level: string; message: string; suggestion?: string }>; suggestions: string[] }> = reviewsResp.ok ? await reviewsResp.json() : [];
 
           setProjectId(projectId);
           setDeckStatus(normalizeDeckStatus(webDeckProject.status));
@@ -152,11 +157,17 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
             Number(webDeckProject.total_pages || 0),
           );
 
-          const htmlByPageId = Array.isArray(pagesPayload)
+          const pageDetailsByPageId = Array.isArray(pagesPayload)
             ? Object.fromEntries(
                 pagesPayload
                   .filter((page: { page_id?: string; html?: string | null }) => page.page_id)
-                  .map((page: { page_id: string; html?: string | null }) => [page.page_id, page.html || ""])
+                  .map((page: { page_id: string; html?: string | null; page_bundle?: Record<string, unknown> | null }) => [
+                    page.page_id,
+                    {
+                      html: page.html || "",
+                      pageBundle: normalizePageBundle(page.page_bundle),
+                    },
+                  ])
               )
             : {};
 
@@ -184,7 +195,7 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
           }
 
           if (Array.isArray(webDeckProject.pages) && webDeckProject.pages.length > 0) {
-            initPages(mapSummaryPages(webDeckProject.pages, htmlByPageId));
+            initPages(mapSummaryPages(webDeckProject.pages, pageDetailsByPageId));
           }
 
           if (htmlPayload?.html) {
@@ -200,6 +211,15 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
 
           setCurrentArtifactType("webdeck");
           setArtifactContent(null);
+          return;
+        }
+
+        const diagramResp = await fetch(`/api/diagram-sessions/task/${taskId}`);
+        const diagramPayload = diagramResp.ok ? await diagramResp.json() : null;
+        if (diagramPayload?.exists && diagramPayload.session?.xml) {
+          hydrateDiagramSession(diagramPayload.session);
+          setCurrentArtifactType("drawio");
+          setArtifactContent(diagramPayload.session.xml);
           return;
         }
 
@@ -220,7 +240,7 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
         setIsHistoryLoading(false);
       }
     })();
-  }, [taskId, clearMessages, resetPpt, resetDeck, setTask, loadMessages, setCurrentArtifactType, setArtifactContent, setHtmlArtifactContent, setProjectId, setDeckStatus, setManifest, initPages, setFinalHtml, setGeneratingProgress]);
+  }, [taskId, clearMessages, resetPpt, resetDeck, resetDiagram, setTask, loadMessages, setCurrentArtifactType, setArtifactContent, setHtmlArtifactContent, hydrateDiagramSession, setProjectId, setDeckStatus, setManifest, initPages, setFinalHtml, setGeneratingProgress, addReview]);
 
   // 连接状态颜色
   const statusColor =
