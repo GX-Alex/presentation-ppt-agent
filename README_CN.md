@@ -88,8 +88,8 @@ AI：我会先整理资料要点和证据来源，生成 WebDeck brief 供你确
 ### 2. 克隆并配置项目
 
 ```bash
-git clone https://github.com/GX-Alex/presentationagent.git
-cd presentationagent
+git clone https://github.com/GX-Alex/presentation-ppt-agent.git
+cd presentation-ppt-agent
 cp .env.example .env
 ```
 
@@ -195,7 +195,7 @@ BACKEND_URL=http://localhost:8012 npm run dev
 ## 项目结构
 
 ```text
-presentationagent/
+presentation-ppt-agent/
 ├── backend/
 │   ├── app/api/                  # files / gallery / packages / presentations / webdeck ...
 │   ├── app/core/                 # agent loop, LLM client, tool dispatch

@@ -90,8 +90,8 @@ then generate the deck page-by-page and return an editable workspace plus export
 ### 2. Clone and configure the project
 
 ```bash
-git clone https://github.com/GX-Alex/presentationagent.git
-cd presentationagent
+git clone https://github.com/GX-Alex/presentation-ppt-agent.git
+cd presentation-ppt-agent
 cp .env.example .env
 ```
 
@@ -197,7 +197,7 @@ BACKEND_URL=http://localhost:8012 npm run dev
 ## Project Layout
 
 ```text
-presentationagent/
+presentation-ppt-agent/
 ├── backend/
 │   ├── app/api/                  # files / gallery / packages / presentations / webdeck ...
 │   ├── app/core/                 # agent loop, LLM client, tool dispatch
