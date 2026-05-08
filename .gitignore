@@ -60,3 +60,4 @@ scripts/
 # Frontend
 frontend/src/components/webdeck/editor/
 *.tsbuildinfo
+assets/

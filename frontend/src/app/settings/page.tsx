@@ -6,7 +6,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import InstalledPackagesPanel from "@/components/packages/InstalledPackagesPanel";
 import { useChatStore } from "@/stores/chatStore";
 import { Eye, EyeOff, Key, Save } from "lucide-react";
 
@@ -345,19 +344,6 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-400 pt-2 border-t border-gray-100">
             提示：密钥仅保存在浏览器本地，不会上传至服务器。生产部署请使用环境变量。
           </p>
-        </div>
-      </section>
-
-      {/* Package 管理 */}
-      <section className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Package 管理</h2>
-        <div className="bento-card p-5 space-y-3">
-          <div>
-            <p className="text-sm text-gray-600">
-              这里展示当前已安装的 Native PPTX-first 相关工作流包、Skill 包和适配器。你可以直接启停，安装请前往公共空间页的 Packages 标签。
-            </p>
-          </div>
-          <InstalledPackagesPanel variant="summary" />
         </div>
       </section>
 

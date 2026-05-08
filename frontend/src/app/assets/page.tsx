@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Inbox,
 } from "lucide-react";
-import InstalledPackagesPanel from "@/components/packages/InstalledPackagesPanel";
 import SkillManager from "@/components/skills/SkillManager";
 import { useToast, ConfirmDialog } from "@/components/ui/Toast";
 import AppImage from "@/components/ui/AppImage";
@@ -64,7 +63,7 @@ function formatDate(iso: string): string {
 
 // ────── Tab 配置 ──────
 
-const tabs = ["全部", "文档", "PPT", "代码", "图片", "📦 Packages", "🔌 Skill"];
+const tabs = ["全部", "文档", "PPT", "代码", "图片", "🔌 Skill"];
 const tabToType: Record<number, string | null> = {
   0: null,
   1: "document",
@@ -72,7 +71,6 @@ const tabToType: Record<number, string | null> = {
   3: "code",
   4: "image",
   5: null,
-  6: null,
 };
 
 // ────── 主组件 ──────
@@ -86,8 +84,6 @@ export default function AssetsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [packageRefreshKey, setPackageRefreshKey] = useState(0);
-  const [installedPackageCount, setInstalledPackageCount] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; assetId: string | null }>({
     open: false,
     assetId: null,
@@ -96,7 +92,7 @@ export default function AssetsPage() {
 
   // 加载资产列表
   const loadAssets = useCallback(async () => {
-    if (activeTab >= 5) return; // Packages / Skill tab 不走此逻辑
+    if (activeTab >= 5) return; // Skill tab 不走此逻辑
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -125,19 +121,11 @@ export default function AssetsPage() {
   // 加载统计数据
   const loadStats = useCallback(async () => {
     try {
-      const [assetRes, packagesRes] = await Promise.all([
-        fetch("/api/assets/stats"),
-        fetch("/api/packages/installed"),
-      ]);
+      const assetRes = await fetch("/api/assets/stats");
 
       if (assetRes.ok) {
         const data = await assetRes.json();
         setStats(data.by_type || data.stats || {});
-      }
-
-      if (packagesRes.ok) {
-        const packageData = await packagesRes.json();
-        setInstalledPackageCount((packageData.items || []).length);
       }
     } catch (err) {
       console.error("[Assets] 加载统计失败:", err);
@@ -159,11 +147,7 @@ export default function AssetsPage() {
   };
 
   const searchPlaceholder =
-    activeTab === 5
-      ? "搜索已安装 Packages..."
-      : activeTab === 6
-        ? "搜索 Skill..."
-        : "搜索资产...";
+    activeTab === 5 ? "搜索 Skill..." : "搜索资产...";
 
   // 删除资产
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -253,11 +237,6 @@ export default function AssetsPage() {
           </div>
           <button
             onClick={() => {
-              if (activeTab === 5) {
-                setPackageRefreshKey((prev) => prev + 1);
-                void loadStats();
-                return;
-              }
               void loadAssets();
               void loadStats();
             }}
@@ -275,9 +254,7 @@ export default function AssetsPage() {
           const fileType = tabToType[i];
           const count = i === 0
             ? Object.values(stats).reduce((s, n) => s + n, 0)
-            : i === 5
-              ? installedPackageCount
-              : fileType
+            : fileType
                 ? stats[fileType] || 0
                 : null;
 
@@ -306,13 +283,6 @@ export default function AssetsPage() {
 
       {/* Tab 内容 */}
       {activeTab === 5 ? (
-        <InstalledPackagesPanel
-          search={search}
-          refreshKey={packageRefreshKey}
-          variant="full"
-          onCountChange={setInstalledPackageCount}
-        />
-      ) : activeTab === 6 ? (
         <SkillManager />
       ) : loading ? (
         <div className="text-center py-20 text-gray-400">

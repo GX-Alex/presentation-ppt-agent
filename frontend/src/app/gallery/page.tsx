@@ -15,7 +15,6 @@ import {
   RefreshCw,
   ImageIcon,
 } from "lucide-react";
-import PackageRegistryPanel from "@/components/packages/PackageRegistryPanel";
 import { useToast } from "@/components/ui/Toast";
 import AppImage from "@/components/ui/AppImage";
 import AssetPreviewModal, { type PreviewAssetItem } from "@/components/assets/AssetPreviewModal";
@@ -63,15 +62,14 @@ function catLabel(cat: string): string {
 
 // ────── Tab 配置 ──────
 
-const tabs = ["推荐", "PPT", "研究", "代码", "📦 Packages", "🔌 Skill", "其他"];
+const tabs = ["推荐", "PPT", "研究", "代码", "🔌 Skill", "其他"];
 const tabToCategory: Record<number, string | null> = {
   0: null,        // 全部 / 推荐
   1: "ppt",
   2: "research",
   3: "code",
-  4: null,
-  5: "skill",
-  6: "other",
+  4: "skill",
+  5: "other",
 };
 const sortOptions = [
   { value: "newest", label: "最新发布" },
@@ -91,12 +89,10 @@ export default function GalleryPage() {
   const [sort, setSort] = useState("newest");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [packageRefreshKey, setPackageRefreshKey] = useState(0);
   const [previewItem, setPreviewItem] = useState<PreviewAssetItem | null>(null);
 
   // 加载画廊列表
   const loadGallery = useCallback(async () => {
-    if (activeTab === 4) return; // Packages tab uses registry API instead of gallery API
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -146,7 +142,7 @@ export default function GalleryPage() {
     setPage(1);
   };
 
-  const searchPlaceholder = activeTab === 4 ? "搜索 Packages..." : "搜索作品...";
+  const searchPlaceholder = "搜索作品...";
 
   // Fork 操作
   const handleFork = async (itemId: string, e: React.MouseEvent) => {
@@ -209,17 +205,15 @@ export default function GalleryPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">公共空间</h1>
         <div className="flex items-center gap-3">
-          {activeTab !== 4 ? (
-            <select
-              value={sort}
-              onChange={(e) => { setSort(e.target.value); setPage(1); }}
-              className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              {sortOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          ) : null}
+          <select
+            value={sort}
+            onChange={(e) => { setSort(e.target.value); setPage(1); }}
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          >
+            {sortOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -232,10 +226,6 @@ export default function GalleryPage() {
           </div>
           <button
             onClick={() => {
-              if (activeTab === 4) {
-                setPackageRefreshKey((prev) => prev + 1);
-                return;
-              }
               void loadGallery();
             }}
             className="p-2.5 text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-100 transition-colors"
@@ -264,9 +254,7 @@ export default function GalleryPage() {
       </div>
 
       {/* 内容区域 */}
-      {activeTab === 4 ? (
-        <PackageRegistryPanel search={search} refreshKey={packageRefreshKey} />
-      ) : loading ? (
+      {loading ? (
         <div className="text-center py-20 text-gray-400">
           <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3" />
           <p className="text-sm">加载中...</p>

@@ -1,0 +1,2 @@
+# Root convenience wrapper for local backend setup.
+-r backend/requirements.txt
