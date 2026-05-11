@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">PresentationAgent workflow overview</title>
+  <desc id="desc">A workflow diagram showing sources, evidence brief, WebDeck runtime, diagram editing, and exportable assets.</desc>
+  <rect width="1200" height="520" fill="#f8fafc"/>
+  <text x="48" y="66" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800" fill="#111827">Research-first presentation workflow</text>
+  <text x="48" y="104" font-family="Inter, Arial, sans-serif" font-size="18" fill="#475569">From files and URLs to reviewed WebDecks, diagrams, gallery assets, and exports.</text>
+  <g transform="translate(48 150)">
+    <rect width="202" height="210" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="24" y="44" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750" fill="#0f172a">Sources</text>
+    <rect x="24" y="76" width="58" height="72" rx="7" fill="#dbeafe"/>
+    <rect x="94" y="76" width="84" height="18" rx="5" fill="#60a5fa"/>
+    <rect x="94" y="112" width="76" height="14" rx="4" fill="#cbd5e1"/>
+    <rect x="94" y="140" width="66" height="14" rx="4" fill="#cbd5e1"/>
+    <text x="24" y="184" font-family="Inter, Arial, sans-serif" font-size="14" fill="#64748b">Files, URLs, briefs, images</text>
+  </g>
+  <g transform="translate(290 150)">
+    <rect width="202" height="210" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="24" y="44" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750" fill="#0f172a">Evidence</text>
+    <rect x="24" y="78" width="150" height="18" rx="5" fill="#0ea5e9"/>
+    <rect x="24" y="114" width="122" height="14" rx="4" fill="#bae6fd"/>
+    <rect x="24" y="142" width="136" height="14" rx="4" fill="#bae6fd"/>
+    <text x="24" y="184" font-family="Inter, Arial, sans-serif" font-size="14" fill="#64748b">Brief, outline, manifest</text>
+  </g>
+  <g transform="translate(532 150)">
+    <rect width="202" height="210" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="24" y="44" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750" fill="#0f172a">WebDeck</text>
+    <rect x="24" y="78" width="42" height="62" rx="6" fill="#22c55e"/>
+    <rect x="78" y="78" width="42" height="62" rx="6" fill="#86efac"/>
+    <rect x="132" y="78" width="42" height="62" rx="6" fill="#bbf7d0"/>
+    <text x="24" y="184" font-family="Inter, Arial, sans-serif" font-size="14" fill="#64748b">Parallel pages, retry, review</text>
+  </g>
+  <g transform="translate(774 150)">
+    <rect width="202" height="210" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="24" y="44" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750" fill="#0f172a">Diagrams</text>
+    <path d="M34 140 C62 80, 96 114, 118 78 S160 88, 174 60" fill="none" stroke="#2563eb" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="62" cy="102" r="9" fill="#f59e0b"/>
+    <circle cx="118" cy="78" r="9" fill="#22c55e"/>
+    <text x="24" y="184" font-family="Inter, Arial, sans-serif" font-size="14" fill="#64748b">draw.io session editing</text>
+  </g>
+  <g transform="translate(1016 150)">
+    <rect width="136" height="210" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="24" y="44" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="750" fill="#0f172a">Export</text>
+    <rect x="24" y="80" width="88" height="24" rx="6" fill="#f97316"/>
+    <rect x="24" y="120" width="88" height="24" rx="6" fill="#2563eb"/>
+    <text x="24" y="184" font-family="Inter, Arial, sans-serif" font-size="14" fill="#64748b">HTML, PDF, PPTX</text>
+  </g>
+  <g stroke="#2563eb" stroke-width="6" stroke-linecap="round">
+    <path d="M250 255h34"/>
+    <path d="M492 255h34"/>
+    <path d="M734 255h34"/>
+    <path d="M976 255h34"/>
+  </g>
+</svg>

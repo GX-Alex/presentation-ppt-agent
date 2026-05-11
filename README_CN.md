@@ -12,11 +12,15 @@
 > 从一句 brief、一组文件或一个链接出发，生成可审阅、可编辑、可发布的演示工作流。
 > PresentationAgent 把对话式创作、research-first 规划、WebDeck 页面编排、diagram-first draw.io 工作区、资产管理与公开画廊整合到同一个本地运行的平台里。
 
+大多数 AI 演示工具会直接从 prompt 跳到 slides。PresentationAgent 面向研究型演示生产：先吸收资料，生成 evidence-first brief，再通过 WebDeck runtime 编排页面、支持重试和审稿，在 draw.io 中继续编辑图表，最后保存、发布或导出演示资产。
+
+![PresentationAgent workflow overview](assets/demo-overview.svg)
+
 `Research-first` · `WebDeck Runtime` · `Diagram-first` · `Gallery & Remix` · `Packages & Skills`
 
 ## 为什么是 PresentationAgent
 
-大多数 AI 演示工具停留在“输入一句 prompt，吐出几页内容”。PresentationAgent 更像一个面向演示生产的智能工作区：
+PresentationAgent 更像一个面向演示生产的智能工作区：
 
 - **先研究，再生成**：附件、链接和上下文会先进入 briefing / evidence 阶段，再交给 planner 和页面编排。
 - **不是单线程拼页面**：WebDeck runtime 按页面依赖并发生成，支持页级 lane 日志、失败页重试和整稿审稿。
@@ -42,6 +46,13 @@
 ## 成品展示
 [人工智能发展现状与趋势分析.pptx](assets/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E5%8F%91%E5%B1%95%E7%8E%B0%E7%8A%B6%E4%B8%8E%E8%B6%8B%E5%8A%BF%E5%88%86%E6%9E%90.pptx)
 
+## 它有什么不同
+
+- **不是一次性导出，而是工作区**：brief、页面、图表、资产和导出结果都可以继续调整。
+- **Evidence-first 生成**：文档、链接和附件先进入规划上下文，再生成页面。
+- **可观测的 WebDeck runtime**：页面依赖、lane 日志、失败重试、审稿和发布过程都能看到。
+- **Diagram-first 编辑**：draw.io 是完整编辑流程的一部分，而不是只生成一张图。
+- **默认本地优先**：SQLite 与本地文件系统让系统易于运行、调试和理解。
 
 ## 核心能力
 
@@ -226,6 +237,16 @@ presentation-ppt-agent/
 - 更稳健的导出适配与发布链路
 - 更丰富的 package / skill 工作流分发能力
 - 更完整的公开文档与示例项目
+
+更多方向和 good-first-issue 可见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+
+## 增加项目曝光
+
+- 按 [docs/PROMOTION.md](docs/PROMOTION.md) 中的建议添加 GitHub topics。
+- 用 [assets/social-preview.svg](assets/social-preview.svg) 生成仓库 social preview。
+- 按 [CHANGELOG.md](CHANGELOG.md) 发布第一个 release。
+- 使用 [docs/PROMOTION.md](docs/PROMOTION.md) 中的中英文发布文案。
+- 使用 `.github/ISSUE_TEMPLATE/` 中的模板收集 bug、功能建议和 good-first-issue。
 
 ## 反馈
 

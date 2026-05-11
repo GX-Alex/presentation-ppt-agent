@@ -12,11 +12,15 @@ English | [简体中文](./README_CN.md)
 > Turn a brief, a set of files, or a URL into a reviewable WebDeck, editable diagrams, and exportable presentation assets.
 > PresentationAgent combines conversational creation, evidence-first planning, WebDeck page orchestration, a diagram-first draw.io workspace, asset management, and gallery publishing in a single locally deployable platform.
 
+Most AI presentation tools jump directly from prompt to slides. PresentationAgent is designed for research-heavy deck production: ingest sources, build an evidence-first brief, orchestrate WebDeck pages with retries and review, edit diagrams in draw.io, then save, publish, or export the result.
+
+![PresentationAgent workflow overview](assets/demo-overview.svg)
+
 `Research-first` · `WebDeck Runtime` · `Diagram-first` · `Gallery & Remix` · `Packages & Skills`
 
 ## Why PresentationAgent
 
-Most AI presentation tools stop at “prompt in, slides out.” PresentationAgent is built more like a production workspace for decks:
+PresentationAgent is built more like a production workspace for decks:
 
 - **Research before rendering**: attachments, URLs, and context flow through a briefing / evidence stage before planning and page generation.
 - **Not a single-thread slide generator**: the WebDeck runtime respects page dependencies, supports lane-level logs, retries failed pages, and performs deck-level review.
@@ -44,6 +48,14 @@ Most AI presentation tools stop at “prompt in, slides out.” PresentationAgen
 ## Sample Output
 
 [AI Development Status and Trend Analysis.pptx](assets/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E5%8F%91%E5%B1%95%E7%8E%B0%E7%8A%B6%E4%B8%8E%E8%B6%8B%E5%8A%BF%E5%88%86%E6%9E%90.pptx)
+
+## Why It Is Different
+
+- **A workspace, not a one-shot export**: keep refining the brief, pages, diagrams, assets, and exports instead of accepting a single generated file.
+- **Evidence-first generation**: documents, URLs, and attachments become planning context before pages are rendered.
+- **Observable WebDeck runtime**: page dependencies, lane logs, retries, review, and publish steps are visible.
+- **Diagram-first editing**: draw.io is integrated as an editing workflow, not an afterthought.
+- **Local-first by default**: SQLite and filesystem persistence keep the product easy to run and inspect.
 
 ## Core Capabilities
 
@@ -228,6 +240,16 @@ presentation-ppt-agent/
 - More reliable export adapters and publishing flows
 - Better package / skill distribution for reusable workflows
 - More complete public documentation and example projects
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for good-first-issue ideas and near-term project direction.
+
+## Grow the Project
+
+- Add GitHub topics from [docs/PROMOTION.md](docs/PROMOTION.md).
+- Use [assets/social-preview.svg](assets/social-preview.svg) as the source artwork for the repository social preview.
+- Publish the first release using [CHANGELOG.md](CHANGELOG.md).
+- Share the launch drafts in [docs/PROMOTION.md](docs/PROMOTION.md).
+- Use the issue templates under `.github/ISSUE_TEMPLATE/` to collect bugs, feature requests, and beginner-friendly contributions.
 
 ## Feedback
 
