@@ -49,6 +49,12 @@ PresentationAgent is built more like a production workspace for decks:
 
 [AI Development Status and Trend Analysis.pptx](assets/%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%E5%8F%91%E5%B1%95%E7%8E%B0%E7%8A%B6%E4%B8%8E%E8%B6%8B%E5%8A%BF%E5%88%86%E6%9E%90.pptx)
 
+## Examples
+
+> **New!** Walk through a complete workflow step-by-step.
+
+- **[Startup Pitch Deck](examples/startup-pitch/)** — Create a 10-slide Series A pitch deck from a company brief. Includes source material, recommended prompt, step-by-step workflow, and expected output reference.
+
 ## Why It Is Different
 
 - **A workspace, not a one-shot export**: keep refining the brief, pages, diagrams, assets, and exports instead of accepting a single generated file.
