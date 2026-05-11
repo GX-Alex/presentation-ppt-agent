@@ -125,6 +125,8 @@ python -m playwright install chromium
 ```
 
 > If you only want to get chat, WebDeck, draw.io, and HTML preview running, you can skip `python -m playwright install chromium` for now. PDF and `pptx-faithful` export will be unavailable until you install it.
+>
+> 💡 Having trouble installing or running Playwright Chromium? See [Playwright Troubleshooting Guide](docs/playwright-troubleshooting.md).
 
 <details>
 <summary><strong>Windows PowerShell</strong></summary>
