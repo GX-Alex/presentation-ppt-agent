@@ -22,13 +22,10 @@ out/
 *.swp
 *.swo
 
-# Logs & Data
-logs/
-*.log
-backend/data/uploads/
-backend/data/exports/
-backend/data/run_code/
-backend/data/tmp/
+# Data (ignore contents, keep directory structure)
+backend/data/*
+# Exception: keep .gitkeep to preserve directory structure
+!backend/data/.gitkeep
 *.db
 *.sqlite
 
