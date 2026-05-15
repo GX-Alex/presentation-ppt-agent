@@ -122,6 +122,8 @@ python -m playwright install chromium
 ```
 
 > 如果你只想先跑通聊天、WebDeck、Draw.io 和 HTML 预览，可以暂时跳过 `python -m playwright install chromium`；但 PDF 与 `pptx-faithful` 导出会不可用。
+>
+> 💡 安装或运行 Playwright Chromium 遇到问题？见 [Playwright 导出故障排查](docs/playwright-troubleshooting.md)。
 
 <details>
 <summary><strong>Windows PowerShell</strong></summary>
