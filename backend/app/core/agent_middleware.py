@@ -69,6 +69,11 @@ class AgentContext:
     # ── 附件 ──
     attachments: list[dict[str, str]] = field(default_factory=list)
 
+    # ── 用户 LLM 配置覆盖（来自 DB 用户设置，优先于环境变量）──
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
+    llm_is_reasoning_model: bool | None = None
+
     # ── 中间件共享存储 (任意 KV) ──
     metadata: dict[str, Any] = field(default_factory=dict)
 

@@ -50,13 +50,22 @@ MIN_ACCEPTABLE_SCORE = 0.85
 # ── Lane 超时配置（秒） ──
 # Minimax LLM 单次调用最长约 120s (litellm timeout)，lane timeout 必须 > 120s 才能等到回包
 LANE_TIMEOUT_DEFAULTS: dict[str, float] = {
-    "narrative": 180.0,    # 叙事 lane：LLM 120s + 重试缓冲
-    "chart": 300.0,        # 图表生成：SVG 复杂图表需要更长时间
-    "diagram": 300.0,      # 图示生成：SVG 图示生成耗时，给足缓冲
-    "asset": 90.0,         # 静态资产
-    "layout": 60.0,        # 布局组合
+    "narrative": 400.0,    # 普通页面叙事 lane（5-7k tokens @ 35 tok/s ≈ 200s，留 200s 缓冲）
+    "chart": 600.0,        # 图表生成：SVG 复杂图表 + 多轮工具调用
+    "diagram": 600.0,      # 图示生成：SVG 图示 + validation retry
+    "asset": 300.0,        # 静态资产
+    "layout": 300.0,       # 布局组合（单次 LLM，加 retry 缓冲）
 }
-DEFAULT_LANE_TIMEOUT = 180.0
+DEFAULT_LANE_TIMEOUT = 400.0
+
+# 高价值页面类型的 narrative lane 需要更长超时
+# architecture/summary 类页面输出 token 多（10k+），35 tok/s 下需要 5+ 分钟
+NARRATIVE_TIMEOUT_BY_PAGE_KIND: dict[str, float] = {
+    "architecture": 800.0,
+    "summary": 600.0,
+    "chart_analysis": 600.0,
+    "roadmap": 600.0,
+}
 
 # ── 页面生成提示词 ──
 PAGE_GENERATION_PROMPT = """你是 Web Deck Page Generator，负责生成单页 Web 演示内容。
@@ -530,7 +539,10 @@ class PageOrchestrator:
             if cancellation_token and cancellation_token.is_cancelled:
                 raise CooperativeCancelledError(f"页面取消: {cancellation_token.cancel_reason}")
 
-            lane_timeout = LANE_TIMEOUT_DEFAULTS.get(lane_kind, DEFAULT_LANE_TIMEOUT)
+            _page_kind = page.page_kind or "content"
+            lane_timeout = NARRATIVE_TIMEOUT_BY_PAGE_KIND.get(
+                _page_kind, LANE_TIMEOUT_DEFAULTS.get(lane_kind, DEFAULT_LANE_TIMEOUT)
+            )
             try:
                 output = await asyncio.wait_for(
                     self.lane_runner.run_lane(

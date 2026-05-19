@@ -298,6 +298,19 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
 
     # 确定解析器
     ext = Path(actual_path).suffix.lower()
+
+    # ZIP/压缩包不支持 parse_document，必须用 parse_project
+    if ext in (".zip", ".tar", ".gz", ".bz2", ".rar", ".7z"):
+        return {
+            "error": (
+                f"压缩包文件 ({ext}) 不支持 parse_document 直接解析。"
+                "请改用 parse_project 工具解析项目压缩包，"
+                "它会自动解压并返回文件树和项目结构。"
+            ),
+            "hint": "use_parse_project_instead",
+            "file_path": file_path,
+        }
+
     parser = _PARSERS.get(ext)
 
     if parser is None:

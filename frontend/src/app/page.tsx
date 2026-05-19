@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useChatStore } from "@/stores/chatStore";
@@ -35,6 +35,14 @@ export default function HomePage() {
 
   const isConnected = connectionStatus === "connected";
   const isConnecting = connectionStatus === "connecting";
+  const [modelName, setModelName] = useState("MiniMax-M2.5");
+
+  useEffect(() => {
+    fetch("/api/llm-config")
+      .then((r) => r.json())
+      .then((d) => { if (d.model) setModelName(d.model); })
+      .catch(() => {});
+  }, []);
 
   /** 发送消息并跳转到聊天页 */
   const handleSend = useCallback(() => {
@@ -202,7 +210,7 @@ export default function HomePage() {
                   </>
                 )}
               </div>
-              <span className="text-[11px] text-gray-400 font-medium">MiniMax-M2.5</span>
+              <span className="text-[11px] text-gray-400 font-medium">{modelName}</span>
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || !isConnected}

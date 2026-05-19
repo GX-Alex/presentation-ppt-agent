@@ -6,14 +6,23 @@ regenerate_deck_page 工具 — 对已完成页面重跑完整生成流水线。
 """
 from __future__ import annotations
 
+import contextvars
 import logging
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from app.core.llm_client import llm_timeout_override
 from app.services.webdeck_runtime.director import DeckDirector
 
 logger = logging.getLogger(__name__)
 REGENERATE_DECK_PAGE_LLM_TIMEOUT_S = 240
+
+_send_fn_var: contextvars.ContextVar[
+    Callable[[dict], Awaitable[None]] | None
+] = contextvars.ContextVar("regen_page_send_fn", default=None)
+
+
+def set_runtime_context(send_fn: Callable[[dict], Awaitable[None]] | None) -> None:
+    _send_fn_var.set(send_fn)
 
 TOOL_DEFINITION: dict[str, Any] = {
     "type": "function",
@@ -64,10 +73,12 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
         project_id, page_id, reason or "未指定",
     )
 
+    send_fn = _send_fn_var.get(None)
+
     async def _noop_send(msg: dict) -> None:
         pass
 
-    director = DeckDirector(send_fn=_noop_send)
+    director = DeckDirector(send_fn=send_fn or _noop_send)
     try:
         with llm_timeout_override(REGENERATE_DECK_PAGE_LLM_TIMEOUT_S):
             await director.retry_page(project_id=project_id, page_id=page_id)

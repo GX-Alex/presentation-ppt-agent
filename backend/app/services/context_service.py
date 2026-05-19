@@ -532,6 +532,8 @@ def _build_messages(history: list) -> list[dict[str, Any]]:
                         for tc in tool_calls_raw
                     ],
                 }
+                if getattr(msg, "reasoning_content", None):
+                    entry["reasoning_content"] = msg.reasoning_content
             except (json.JSONDecodeError, KeyError):
                 entry = {"role": "assistant", "content": msg.content or ""}
             messages.append(entry)
@@ -561,7 +563,10 @@ def _build_messages(history: list) -> list[dict[str, Any]]:
             messages.append(entry)
 
         else:
-            messages.append({"role": msg.role, "content": msg.content or ""})
+            entry = {"role": msg.role, "content": msg.content or ""}
+            if msg.role == "assistant" and getattr(msg, "reasoning_content", None):
+                entry["reasoning_content"] = msg.reasoning_content
+            messages.append(entry)
 
     return _sanitize_tool_call_pairing(messages)
 

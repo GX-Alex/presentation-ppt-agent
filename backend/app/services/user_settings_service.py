@@ -24,6 +24,13 @@ DEFAULT_USER_SETTINGS: dict[str, Any] = {
     "ui": {
         "show_thinking": True,
     },
+    "llm": {
+        "provider": "",
+        "base_url": "",
+        "model": "",
+        "api_key": "",
+        "is_reasoning_model": False,
+    },
 }
 
 

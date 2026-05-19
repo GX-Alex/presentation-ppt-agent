@@ -330,20 +330,36 @@ class DeckStateStore:
         issues: list | None = None,
         suggestions: list | None = None,
     ) -> DeckReviewReport:
-        """保存审稿报告"""
-        report = DeckReviewReport(
-            project_id=project_id,
-            page_id=page_db_id,
-            level=level,
-            passed=passed,
-            score=score,
-            issues=issues or [],
-            suggestions=suggestions or [],
-        )
-        session.add(report)
-        await session.commit()
-        await session.refresh(report)
-        return report
+        """保存审稿报告。若传入 session 已回滚则自动用新会话重试。"""
+        from app.models.database import async_session as _async_session
+        from sqlalchemy.exc import InvalidRequestError, OperationalError
+
+        async def _do_save(s: AsyncSession) -> DeckReviewReport:
+            report = DeckReviewReport(
+                project_id=project_id,
+                page_id=page_db_id,
+                level=level,
+                passed=passed,
+                score=score,
+                issues=issues or [],
+                suggestions=suggestions or [],
+            )
+            s.add(report)
+            await s.commit()
+            try:
+                await s.refresh(report)
+            except Exception:
+                pass  # commit 已成功，refresh 失败不影响数据完整性
+            return report
+
+        try:
+            return await _do_save(session)
+        except (InvalidRequestError, OperationalError) as exc:
+            logger.warning(
+                "[StateStore] save_review 可重试异常，用新会话重试: %s", exc
+            )
+            async with _async_session() as fresh:
+                return await _do_save(fresh)
 
     async def get_reviews(
         self,

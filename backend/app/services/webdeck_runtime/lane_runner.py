@@ -128,10 +128,10 @@ DIAGRAM_PROMPT = """你是 Diagram Agent，负责为演示页面生成架构图 
 ## 输出要求
 输出严格 JSON，对同一张图同时给出 Draw.io 真源和可直接预览的 HTML。
 ```json
-{
+{{
     "drawio_xml": "<mxfile>...</mxfile>",
-    "rendered_html": "<div class=\"deck-visual-wrapper deck-diagram-wrapper\">...inline svg...</div>"
-}
+    "rendered_html": "<div class=\\"deck-visual-wrapper deck-diagram-wrapper\\">...inline svg...</div>"
+}}
 ```
 
 ## 约束

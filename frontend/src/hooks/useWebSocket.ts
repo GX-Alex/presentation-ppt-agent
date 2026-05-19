@@ -282,9 +282,22 @@ function _handleMessage(event: MessageEvent): void {
 
     case "diagram_load":
     case "diagram_session_synced": {
+      console.log("[DEBUG diagram_load]", {
+        type: data.type,
+        scopedTaskId,
+        storeTaskId: store.taskId,
+        matchesCurrentTask,
+        hasSession: !!data.session,
+        sessionXmlLen: typeof (data.session as Record<string, unknown>)?.xml === "string"
+          ? ((data.session as Record<string, unknown>).xml as string).length
+          : "N/A",
+      });
       if (!matchesCurrentTask) break;
       const session = _readDiagramSession(data);
-      if (!session) break;
+      if (!session) {
+        console.log("[DEBUG diagram_load] _readDiagramSession returned null", data.session);
+        break;
+      }
       useDiagramStore.getState().hydrateSession(session);
       store.setCurrentArtifactType("drawio");
       store.setArtifactContent(session.xml);

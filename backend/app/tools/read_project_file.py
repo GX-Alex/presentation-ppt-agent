@@ -92,7 +92,14 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     max_chars = params.get("max_chars", 20000)
 
     if not extract_dir or not file_path:
-        return {"error": "缺少 extract_dir 或 file_path 参数"}
+        return {
+            "error": (
+                "缺少 extract_dir 参数。"
+                "extract_dir 是项目解压目录路径，有两种获取方式：\n"
+                "1. 若已上传项目文件：先调用 parse_project(asset_id=...) 获取 extract_dir，再用它调用本工具\n"
+                "2. 若 context 中已有 extract_dir 字段：直接使用该值"
+            )
+        }
 
     # 安全检查: 确保路径在合法目录内
     full_path = os.path.realpath(os.path.join(extract_dir, file_path))

@@ -31,6 +31,7 @@ from app.services.context_service import (
     assemble_context,
     compress_context,
 )
+from app.services.user_settings_service import get_user_settings as _get_user_settings_for_llm
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +291,23 @@ class AgentRunner:
 
         await ctx.session.commit()
 
+        # ── 加载用户 LLM 配置（覆盖环境变量）──
+        _user_settings = await _get_user_settings_for_llm(ctx.session, ctx.user_id)
+        _llm_cfg = _user_settings.get("llm", {})
+        if _llm_cfg.get("api_key"):
+            ctx.llm_api_key = _llm_cfg["api_key"]
+        if _llm_cfg.get("base_url"):
+            ctx.llm_base_url = _llm_cfg["base_url"]
+        if _llm_cfg.get("is_reasoning_model") is not None:
+            ctx.llm_is_reasoning_model = bool(_llm_cfg["is_reasoning_model"])
+        if _llm_cfg.get("model") and not ctx.model:
+            _model = _llm_cfg["model"]
+            _provider = _llm_cfg.get("provider", "")
+            if _provider and "/" not in _model:
+                ctx.model = f"{_provider}/{_model}"
+            else:
+                ctx.model = _model
+
         # ── 1. on_request_start: 记忆捕获、附件注入、brief 补充 ──
         await chain.run_request_start(ctx)
         if ctx.should_stop:
@@ -297,7 +315,14 @@ class AgentRunner:
             await chain.run_request_end(ctx)
             return
 
-        # ── 2. 推送 "正在思考" 状态 ──
+        # ── 2. 推送 agent_start + "正在思考" 状态 ──
+        # agent_start 无条件发送，确保前端立即进入 running 状态、显示终止按钮。
+        # 原 stream_start 仅在首个文字 chunk 时发送，直接调工具时前端永远收不到。
+        if ctx.send_fn:
+            await ctx.send_fn({
+                "type": "stream_start",
+                "task_id": ctx.task_id,
+            })
         if ctx.send_fn:
             await ctx.send_fn({
                 "type": "status",
@@ -424,16 +449,14 @@ class AgentRunner:
                 tools=tools if tools else None,
                 model=ctx.model,
                 task_id=ctx.task_id,
+                api_key_override=ctx.llm_api_key,
+                base_url_override=ctx.llm_base_url,
+                is_reasoning_model=ctx.llm_is_reasoning_model,
             ):
                 chunk_type = chunk.get("type")
 
                 if chunk_type == "content_delta":
-                    # 首个 content chunk 时发送 stream_start
-                    if not stream_started and ctx.send_fn:
-                        await ctx.send_fn({
-                            "type": "stream_start",
-                            "task_id": ctx.task_id,
-                        })
+                    if not stream_started:
                         stream_started = True
                     # 逐 chunk 推送给前端
                     if ctx.send_fn:
@@ -459,8 +482,8 @@ class AgentRunner:
 
         except Exception as e:
             logger.exception(f"[AgentRunner] LLM 流式调用失败: {e}")
-            # 如果已开始流式，先结束流
-            if stream_started and ctx.send_fn:
+            # run() 已无条件发送 stream_start，此处无论是否有 content_delta 都需对称发送 stream_end
+            if ctx.send_fn:
                 await ctx.send_fn({
                     "type": "stream_end",
                     "task_id": ctx.task_id,
@@ -518,6 +541,7 @@ class AgentRunner:
             content=content,
             msg_type="text",
             token_count=response.total_tokens,
+            reasoning_content=response.reasoning_content or None,
             created_at=datetime.utcnow(),
         )
         ctx.session.add(assistant_msg)
@@ -579,6 +603,8 @@ class AgentRunner:
         if ctx.task_id in _deck_trigger_in_flight:
             logger.info(f"[AgentRunner] task={ctx.task_id} deck 生成已在进行中，跳过自动触发")
             return
+        # 在第一个 await 前占位：asyncio 单线程保证此处 add 是原子的，防止并发重入
+        _deck_trigger_in_flight.add(ctx.task_id)
         try:
             from app.services.webdeck_runtime.state_store import deck_state_store
             existing = await deck_state_store.get_project_by_task(ctx.session, ctx.task_id)
@@ -586,6 +612,7 @@ class AgentRunner:
                 logger.info(
                     f"[AgentRunner] task={ctx.task_id} 已有 deck 项目 {existing.id}，跳过自动触发"
                 )
+                _deck_trigger_in_flight.discard(ctx.task_id)
                 return
         except Exception:
             pass  # 如果查询失败，仍然尝试触发
@@ -600,8 +627,7 @@ class AgentRunner:
             import asyncio
             from app.services.webdeck_runtime.director import DeckDirector
 
-            director = DeckDirector(send_fn=ctx.send_fn, model=ctx.get_meta("model"))
-            _deck_trigger_in_flight.add(ctx.task_id)
+            director = DeckDirector(send_fn=ctx.send_fn, model=ctx.model)
 
             async def _run_director():
                 try:
@@ -621,6 +647,7 @@ class AgentRunner:
             asyncio.create_task(_run_director())
         except Exception as e:
             logger.warning(f"[AgentRunner] 无法启动 DeckDirector: {e}")
+            _deck_trigger_in_flight.discard(ctx.task_id)
 
     async def _handle_tool_use(
         self,
@@ -674,7 +701,7 @@ class AgentRunner:
             })
 
         # 构建 assistant 消息 (含 tool_calls)
-        assistant_tool_msg = {
+        assistant_tool_msg: dict[str, Any] = {
             "role": "assistant",
             "content": response.content or "",
             "tool_calls": [
@@ -689,6 +716,9 @@ class AgentRunner:
                 for tc in response.tool_calls
             ],
         }
+        # DeepSeek reasoning models: reasoning_content must be echoed back in subsequent requests
+        if response.reasoning_content:
+            assistant_tool_msg["reasoning_content"] = response.reasoning_content
         ctx.messages.append(assistant_tool_msg)
 
         # 持久化 assistant tool_calls
@@ -705,6 +735,7 @@ class AgentRunner:
                 ensure_ascii=False,
             ),
             msg_type="tool_calls",
+            reasoning_content=response.reasoning_content or None,
             created_at=datetime.utcnow(),
         )
         ctx.session.add(assistant_tc_record)
@@ -728,9 +759,36 @@ class AgentRunner:
                 if tc.name == "dispatch_subagent":
                     from app.tools.dispatch_subagent import set_runtime_context
                     set_runtime_context(ctx.send_fn, task, ctx.model)
+                    # 若本次请求已解压了项目压缩包，自动注入 extract_dir 到 code_analyst
+                    _extract_dir = ctx.metadata.get("project_extract_dir")
+                    if _extract_dir and isinstance(params, dict):
+                        # 收集主 Agent 已读取的文件，避免 code_analyst 重复读
+                        _covered_files: list[str] = []
+                        for _msg in ctx.messages:
+                            if _msg.get("role") == "assistant" and isinstance(_msg.get("tool_calls"), list):
+                                for _tc in _msg["tool_calls"]:
+                                    if isinstance(_tc.get("function"), dict):
+                                        if _tc["function"].get("name") == "read_project_file":
+                                            try:
+                                                _args = json.loads(_tc["function"].get("arguments", "{}"))
+                                                _fp = _args.get("file_path", "")
+                                                if _fp and _fp != ".":
+                                                    _covered_files.append(_fp)
+                                            except (json.JSONDecodeError, ValueError):
+                                                pass
+                        for _agent in params.get("agents", []):
+                            if _agent.get("agent_type") == "code_analyst":
+                                if not isinstance(_agent.get("context"), dict):
+                                    _agent["context"] = {}
+                                _agent["context"].setdefault("extract_dir", _extract_dir)
+                                if _covered_files:
+                                    _agent["context"].setdefault("covered_files", _covered_files)
                 elif tc.name in DIAGRAM_RUNTIME_TOOLS:
                     from app.services.diagram_runtime import set_runtime_context as set_diagram_runtime_context
                     set_diagram_runtime_context(ctx.send_fn, ctx.task_id, ctx.user_id)
+                elif tc.name == "regenerate_deck_page":
+                    from app.tools.regenerate_deck_page import set_runtime_context as set_regen_context
+                    set_regen_context(ctx.send_fn)
 
                 tool_result = await dispatch(
                     tc.name,
@@ -790,13 +848,18 @@ class AgentRunner:
             if response.stop_reason == "end_turn":
                 # 追加最终内容到 messages
                 if response.content:
-                    ctx.messages.append({"role": "assistant", "content": response.content})
+                    assistant_msg: dict[str, Any] = {"role": "assistant", "content": response.content}
+                    # DeepSeek: 如果有 reasoning_content 也需要回传（非工具调用时可选，但保持一致性）
+                    if response.reasoning_content:
+                        assistant_msg["reasoning_content"] = response.reasoning_content
+                    ctx.messages.append(assistant_msg)
                 await chain.run_round_end(ctx)
                 return
 
             if response.stop_reason == "tool_use":
                 # 处理工具调用（不持久化到 DB）
-                tool_calls_msg = {
+                # DeepSeek reasoning models: include reasoning_content for multi-turn continuity
+                tool_calls_msg: dict[str, Any] = {
                     "role": "assistant",
                     "content": response.content or "",
                     "tool_calls": [
@@ -805,6 +868,9 @@ class AgentRunner:
                         for tc in response.tool_calls
                     ],
                 }
+                # DeepSeek: 必须回传 reasoning_content 给 API
+                if response.reasoning_content:
+                    tool_calls_msg["reasoning_content"] = response.reasoning_content
                 ctx.messages.append(tool_calls_msg)
 
                 for tc in response.tool_calls:
@@ -832,6 +898,16 @@ class AgentRunner:
                     else:
                         params = intercepted
                         try:
+                            if tc.name == "regenerate_deck_page":
+                                from app.tools.regenerate_deck_page import set_runtime_context as set_regen_context
+                                set_regen_context(ctx.send_fn)
+                            elif tc.name in DIAGRAM_RUNTIME_TOOLS:
+                                from app.services.diagram_runtime import set_runtime_context as set_diagram_runtime_context
+                                if ctx.task_id == "subagent":
+                                    logger.warning(
+                                        "[SubAgent] diagram 工具注入时 task_id='subagent'，WS 事件可能无法到达前端"
+                                    )
+                                set_diagram_runtime_context(ctx.send_fn, ctx.task_id, ctx.user_id)
                             tool_result = await tool_dispatch(tc.name, params, session=ctx.session, user_id=ctx.user_id)
                         except Exception as e:
                             tool_result = {"error": str(e)}

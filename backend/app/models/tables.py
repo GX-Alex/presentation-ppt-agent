@@ -61,6 +61,7 @@ class TaskMessage(Base):
     msg_type = Column(String(30), nullable=True)  # text | thinking | plan | slide | ... (消息类型)
     tool_name = Column(String(63), nullable=True)  # 工具名称
     tool_input = Column(JSON, nullable=True)  # 工具输入参数
+    reasoning_content = Column(Text, nullable=True)  # DeepSeek reasoning models: thinking chain
     is_compressed = Column(Boolean, default=False)  # 是否已压缩
     token_count = Column(Integer, nullable=True)  # Token 用量
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -31,6 +31,7 @@ from app.api.presentations import router as presentations_router
 from app.api.webdeck import router as webdeck_router
 from app.api.diagram_sessions import router as diagram_sessions_router
 from app.api.diagram_validation import router as diagram_validation_router
+from app.api.llm_config import router as llm_config_router
 from app.ws.chat_handler import router as ws_router
 from app.models.database import async_session, init_db
 from app.core.tool_dispatch import auto_discover_tools
@@ -146,6 +147,7 @@ app.include_router(presentations_router, prefix="/api")
 app.include_router(webdeck_router, prefix="/api")
 app.include_router(diagram_sessions_router, prefix="/api")
 app.include_router(diagram_validation_router, prefix="/api")
+app.include_router(llm_config_router, prefix="/api")
 
 # WebSocket
 app.include_router(ws_router)

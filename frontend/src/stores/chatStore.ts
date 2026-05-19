@@ -356,7 +356,41 @@ export const useChatStore = create<ChatStore>((set) => ({
   addMessage: (msg) =>
     set((state) => ({ messages: [...state.messages, msg] })),
   clearMessages: () => set({ messages: [], htmlArtifactContent: null }),
-  loadMessages: (msgs) => set({ messages: msgs }),
+  loadMessages: (msgs) => {
+    // 从历史记录重建 executionSteps，避免刷新后执行记录丢失
+    const steps: ExecutionStep[] = [];
+    const displayMessages: ChatMessage[] = [];
+    for (const msg of msgs) {
+      if (msg.type === "tool_calls" && msg.role === "assistant") {
+        try {
+          const data = JSON.parse(msg.content) as {
+            tool_calls?: Array<{ id: string; name: string; input?: unknown }>;
+            text?: string;
+          };
+          const toolCalls = data.tool_calls || [];
+          if (toolCalls.length > 0) {
+            const names = toolCalls.map((tc) => tc.name).join(", ");
+            steps.push({
+              id: msg.id,
+              type: toolCalls.some((tc) => tc.name === "dispatch_subagent")
+                ? "subagent_dispatch"
+                : "tool_call",
+              status: "completed",
+              title: names,
+              toolName: toolCalls[0]?.name,
+              startTime: msg.timestamp,
+            });
+          }
+        } catch {
+          // 解析失败跳过
+        }
+        // tool_calls 记录不进主消息列表
+      } else {
+        displayMessages.push(msg);
+      }
+    }
+    set({ messages: displayMessages, executionSteps: steps });
+  },
 
   // PPT 状态机
   pptState: "idle",

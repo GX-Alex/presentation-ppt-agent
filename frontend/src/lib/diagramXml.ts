@@ -47,6 +47,13 @@ export function isMinimalDiagram(xml: string): boolean {
   return normalized.includes("<mxfile") || normalized.includes("<mxGraphModel") || normalized.includes("<mxCell");
 }
 
+function fixGeometryAsAttribute(xml: string): string {
+  // Remove existing as attribute (wrong value), then add correct one
+  return xml
+    .replace(/<mxGeometry\b([^>]*?)\s+as="[^"]*"/g, "<mxGeometry$1")
+    .replace(/<mxGeometry\b(?![^>]*\bas="geometry")/g, '<mxGeometry as="geometry"');
+}
+
 export function prepareDiagramXmlForViewer(raw: string | null | undefined): { xml: string; fixed: boolean; error?: string } {
   const extracted = extractDiagramXml(raw);
   if (!extracted) {
@@ -54,18 +61,18 @@ export function prepareDiagramXmlForViewer(raw: string | null | undefined): { xm
   }
 
   if (extracted.includes("<mxfile")) {
-    return { xml: extracted, fixed: false };
+    return { xml: fixGeometryAsAttribute(extracted), fixed: false };
   }
 
   if (extracted.includes("<mxGraphModel")) {
     return {
-      xml: `<mxfile><diagram id="viewer" name="Page-1">${extracted}</diagram></mxfile>`,
+      xml: fixGeometryAsAttribute(`<mxfile><diagram id="viewer" name="Page-1">${extracted}</diagram></mxfile>`),
       fixed: true,
     };
   }
 
   if (extracted.includes("<mxCell") && isMxCellFragmentComplete(extracted)) {
-    return { xml: wrapMxCellsWithMxfile(extracted), fixed: true };
+    return { xml: fixGeometryAsAttribute(wrapMxCellsWithMxfile(extracted)), fixed: true };
   }
 
   return {

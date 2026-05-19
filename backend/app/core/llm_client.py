@@ -164,6 +164,18 @@ def _is_minimax_model(model: str, base_url: str | None) -> bool:
     )
 
 
+def _is_deepseek_reasoning_model(model: str, base_url: str | None) -> bool:
+    """判断当前请求是否走 DeepSeek 推理模型路径（如 deepseek-reasoner、deepseek-v4-pro）。"""
+    model_lower = (model or "").lower()
+    base_url_lower = (base_url or "").lower()
+    is_deepseek_base = "deepseek" in model_lower or "deepseek" in base_url_lower
+    if not is_deepseek_base:
+        return False
+    # 推理模型标识：reasoner、thinking、v4-pro/v4-flash 等 DeepSeek v4 系列
+    reasoning_patterns = ("reasoner", "reasoning", "thinking", "v4-")
+    return any(p in model_lower for p in reasoning_patterns)
+
+
 def _stringify_message_content(content: Any) -> str:
     """将消息内容安全转换为字符串。"""
     if content is None:
@@ -181,9 +193,21 @@ def _normalize_messages_for_provider(
     messages: list[dict[str, Any]],
     model: str,
     base_url: str | None,
+    is_reasoning_model: bool | None = None,
 ) -> list[dict[str, Any]]:
     """按 provider 能力重写消息列表。"""
     full_messages = [{"role": "system", "content": system}] + messages
+
+    # DeepSeek reasoning models require reasoning_content on every assistant message.
+    # Old DB records have NULL; fill with "" so the API doesn't reject the request.
+    _is_reasoning = is_reasoning_model if is_reasoning_model is not None else _is_deepseek_reasoning_model(model, base_url)
+    if _is_reasoning:
+        patched = []
+        for msg in full_messages:
+            if msg.get("role") == "assistant" and "reasoning_content" not in msg:
+                msg = {**msg, "reasoning_content": ""}
+            patched.append(msg)
+        return patched
 
     if not _is_minimax_model(model, base_url):
         return full_messages
@@ -397,6 +421,7 @@ class LLMResponse:
     content: str = ""
     stop_reason: str = "end_turn"  # "end_turn" | "tool_use"
     tool_calls: list[ToolCall] = field(default_factory=list)
+    reasoning_content: str = ""  # DeepSeek reasoning models: thinking chain content
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -412,6 +437,9 @@ async def chat(
     model: str | None = None,
     task_id: str | None = None,
     request_timeout_s: int | None = None,
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
+    is_reasoning_model: bool | None = None,
 ) -> LLMResponse:
     """
     向配置的 LLM 发送聊天补全请求。
@@ -423,13 +451,15 @@ async def chat(
         model: 覆盖默认模型名称
         task_id: 用于日志上下文
         request_timeout_s: 覆盖默认单次 LLM HTTP 超时（秒）
+        api_key_override: 覆盖环境变量中的 API Key（来自用户 DB 配置）
+        base_url_override: 覆盖环境变量中的 Base URL（来自用户 DB 配置）
 
     Returns:
         LLMResponse，包含 content、stop_reason 和可选的 tool_calls
     """
     model = model or _get_model()
 
-    base_url = _get_base_url()
+    base_url = base_url_override or _get_base_url()
 
     # 构建 provider 兼容的完整消息列表
     full_messages = _normalize_messages_for_provider(
@@ -437,13 +467,14 @@ async def chat(
         messages=messages,
         model=model,
         base_url=base_url,
+        is_reasoning_model=is_reasoning_model,
     )
 
     # 构建请求参数 — 显式传 api_key 确保 .env 加载后生效
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": full_messages,
-        "api_key": _get_api_key(),
+        "api_key": api_key_override or _get_api_key(),
         "_request_timeout_s": request_timeout_s,
     }
     if base_url:
@@ -451,6 +482,9 @@ async def chat(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
+
+    if is_reasoning_model if is_reasoning_model is not None else _is_deepseek_reasoning_model(model, base_url):
+        kwargs["thinking"] = {"type": "disabled"}
 
     try:
         response, used_model = await _execute_completion(
@@ -611,6 +645,9 @@ async def chat_stream(
     model: str | None = None,
     task_id: str | None = None,
     request_timeout_s: int | None = None,
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
+    is_reasoning_model: bool | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Streaming version of chat(). Yields chunks as they arrive.
 
@@ -621,14 +658,15 @@ async def chat_stream(
     - {"type": "error", "error": str} -- on failure
     """
     resolved_model = model or _get_model()
-    api_key = _get_api_key()
-    base_url = _get_base_url()
+    api_key = api_key_override or _get_api_key()
+    base_url = base_url_override or _get_base_url()
 
     all_messages = _normalize_messages_for_provider(
         system=system,
         messages=messages,
         model=resolved_model,
         base_url=base_url,
+        is_reasoning_model=is_reasoning_model,
     )
 
     kwargs: dict[str, Any] = {
@@ -644,6 +682,9 @@ async def chat_stream(
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
 
+    if is_reasoning_model if is_reasoning_model is not None else _is_deepseek_reasoning_model(resolved_model, base_url):
+        kwargs["thinking"] = {"type": "disabled"}
+
     try:
         response, resolved_model = await _get_stream_response_with_retry(
             request_kwargs=kwargs,
@@ -652,14 +693,29 @@ async def chat_stream(
         )
 
         collected_content = ""
+        collected_reasoning = ""  # DeepSeek reasoning models: collected reasoning_content
         collected_tool_calls: list[dict] = []
         finish_reason = None
         usage_info = {}
+        is_reasoning_model = is_reasoning_model if is_reasoning_model is not None else _is_deepseek_reasoning_model(resolved_model, base_url)
 
         async for chunk in response:
             delta = chunk.choices[0].delta if chunk.choices else None
             if not delta:
                 continue
+
+            # DeepSeek reasoning models: handle reasoning_content separately
+            # The API requires reasoning_content to be echoed back in subsequent requests
+            # For streaming, we collect it but don't treat it as user-visible content
+            if is_reasoning_model and hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                collected_reasoning += delta.reasoning_content
+                # Don't yield reasoning_content to user - it's intermediate thinking
+                # Log it for debugging purposes
+                logger.debug(
+                    "[LLM] reasoning_content chunk: model=%s len=%d",
+                    resolved_model,
+                    len(delta.reasoning_content),
+                )
 
             # Content streaming
             if delta.content:
@@ -734,6 +790,7 @@ async def chat_stream(
             content=collected_content or "",
             stop_reason=stop_reason,
             tool_calls=parsed_tool_calls or [],
+            reasoning_content=collected_reasoning if is_reasoning_model else "",
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,

@@ -221,6 +221,9 @@ def _validate_cells(root: ET.Element, fixes: list[str], warnings: list[str]) -> 
                 {"x": "0", "y": "0", "width": "120", "height": "60", "as": "geometry"},
             )
             warnings.append(f"vertex {cell_id} 缺少 geometry，已补默认尺寸")
+        elif geometry is not None and geometry.get("as") != "geometry":
+            geometry.set("as", "geometry")
+            fixes.append(f"fixed_geometry_as_attr:{cell_id}")
 
     return True, None
 

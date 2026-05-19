@@ -112,10 +112,11 @@ DEFAULT_TOOL_RUNTIME_METADATA: dict[str, Any] = {
 }
 
 TOOL_TIMEOUT_OVERRIDES: dict[str, float] = {
-    "dispatch_subagent": 300.0,
+    "dispatch_subagent": 900.0,
     "run_code": 240.0,
     "edit_deck_page": 240.0,
-    "regenerate_deck_page": 420.0,
+    "regenerate_deck_page": 600.0,
+    "retry_failed_deck_pages": 1800.0,
 }
 
 # ────────────── Tool Middleware ──────────────

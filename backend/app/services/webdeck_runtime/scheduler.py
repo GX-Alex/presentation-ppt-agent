@@ -16,19 +16,19 @@ from app.services.webdeck_runtime.state_store import deck_state_store
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_PAGE_CONCURRENCY = 8
+DEFAULT_MAX_PAGE_CONCURRENCY = 12
 
 # 页面级超时（秒）— 单页生成最多允许的执行时间
 # 高价值页面有 3 条 lane，每条 lane 的 LLM 最长约 120s；多轮审稿重试再加一倍
 # 300s 不够，改为 600s (10分钟)
-DEFAULT_PAGE_TIMEOUT_S = 600  # 10 分钟
+DEFAULT_PAGE_TIMEOUT_S = 1200  # 20 分钟（narrative 400s + diagram 600s + layout 180s）
 
 # 高价值页面类型需要更长超时（多 lane + 多轮审稿 + diagram 可能很慢）
 PAGE_TIMEOUT_OVERRIDES: dict[str, int] = {
-    "architecture": 900,
-    "summary": 900,
-    "chart_analysis": 900,   # diagram lane 延长至 300s，加审稿重试需要更长页级超时
-    "roadmap": 900,
+    "architecture": 1800,    # narrative 800s + diagram 600s + layout 180s
+    "summary": 1800,
+    "chart_analysis": 1800,
+    "roadmap": 1800,
 }
 
 # 软依赖：依赖页失败时仍允许尝试生成（缺少上下文但不级联失败）
@@ -227,6 +227,21 @@ class LaneScheduler:
                     send_fn=send_fn,
                 )
                 failed += len(newly_failed)
+
+                # 软依赖移除后可能有页面变为可运行，需要重新入队
+                _running_ids = {pid for pid, _ in running.values()}
+                for dep_id in dependents.get(page_id, set()):
+                    if (
+                        dep_id not in blocked
+                        and not dependencies.get(dep_id)
+                        and dep_id not in ready
+                        and dep_id not in _running_ids
+                    ):
+                        ready.append(dep_id)
+                        logger.info(
+                            "[Scheduler] 软依赖解除后重新入队: page=%s (dep %s 失败后解锁)",
+                            dep_id, page_id,
+                        )
 
         unresolved_pages = [
             page_id for page_id in pages_by_id

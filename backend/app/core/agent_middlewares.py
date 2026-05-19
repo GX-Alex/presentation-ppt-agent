@@ -124,6 +124,7 @@ class AttachmentInjectionMiddleware(AgentMiddleware):
     """
 
     async def on_request_start(self, ctx: AgentContext) -> None:
+        from pathlib import Path as _Path
         from app.core.tool_dispatch import dispatch
 
         attachments = _extract_attachment_refs(ctx.user_message)
@@ -140,14 +141,36 @@ class AttachmentInjectionMiddleware(AgentMiddleware):
             })
 
         for attachment in attachments:
-            params = {
-                "asset_id": attachment["asset_id"],
-                "file_path": attachment["file_url"],
-                "max_chars": 12000,
-                "index_chunks": False,
-            }
+            filename = attachment["filename"]
+            file_ext = _Path(filename).suffix.lower()
+            is_archive = file_ext in (".zip", ".tar", ".gz", ".bz2", ".rar", ".7z")
+
+            if is_archive:
+                # 压缩包路由到 parse_project（正确解压 + 分析结构）
+                tool_name = "parse_project"
+                params = {
+                    "asset_id": attachment["asset_id"],
+                    "file_path": attachment["file_url"],
+                }
+            else:
+                tool_name = "parse_document"
+                params = {
+                    "asset_id": attachment["asset_id"],
+                    "file_path": attachment["file_url"],
+                    "max_chars": 12000,
+                    "index_chunks": False,
+                }
+
             tool_call_id = f"auto_parse_{uuid.uuid4().hex}"
-            tool_result = await dispatch("parse_document", params)
+            tool_result = await dispatch(tool_name, params)
+
+            # 若 parse_project 成功，保存 extract_dir 供 code_analyst 使用
+            if is_archive and isinstance(tool_result, dict) and tool_result.get("extract_dir"):
+                ctx.metadata["project_extract_dir"] = tool_result["extract_dir"]
+                ctx.metadata["project_file_tree"] = tool_result.get("file_tree", "")
+                logger.info(
+                    f"[AttachmentInjection] ZIP 已解压: extract_dir={tool_result['extract_dir']}"
+                )
 
             # 持久化 assistant tool_calls 消息
             assistant_tc_record = TaskMessage(
@@ -157,10 +180,10 @@ class AttachmentInjectionMiddleware(AgentMiddleware):
                 content=json.dumps({
                     "tool_calls": [{
                         "id": tool_call_id,
-                        "name": "parse_document",
+                        "name": tool_name,
                         "input": params,
                     }],
-                    "text": f"自动解析附件: {attachment['filename']}",
+                    "text": f"自动解析附件: {filename}",
                 }, ensure_ascii=False),
                 msg_type="tool_calls",
                 created_at=datetime.utcnow(),
@@ -173,13 +196,62 @@ class AttachmentInjectionMiddleware(AgentMiddleware):
                 role="tool",
                 content=json.dumps(tool_result, ensure_ascii=False),
                 msg_type="tool_result",
-                tool_name="parse_document",
+                tool_name=tool_name,
                 tool_input={"_tool_call_id": tool_call_id, **params},
                 created_at=datetime.utcnow(),
             )
             ctx.session.add(tool_msg_record)
 
         await ctx.session.commit()
+
+    async def on_tool_start(
+        self, ctx: AgentContext, tool_name: str, params: dict
+    ) -> dict | None:
+        """拦截 run_code 调用，自动将 /static/ 路径引用转为可访问路径。
+
+        对文本文件：注入 extra_files 并将路径重写为 ./filename。
+        对二进制文件（ZIP 等）：直接将 URL 路径重写为真实磁盘路径。
+        """
+        if tool_name != "run_code":
+            return params
+
+        code = params.get("code", "")
+        if not code or "/static/" not in code:
+            return params
+
+        import re
+        from pathlib import Path as _Path
+
+        backend_root = _Path(__file__).resolve().parents[2]
+        extra_files: dict[str, str] = dict(params.get("extra_files") or {})
+        modified_code = code
+
+        static_refs = sorted(set(re.findall(
+            r'/static/(?:uploads|run_code)/[^\s\'"\\,;)>\n]+', code
+        )))
+
+        for ref in static_refs:
+            real_path = backend_root / ref.replace("/static/", "data/", 1)
+            if not real_path.is_file():
+                continue
+
+            try:
+                content = real_path.read_text(encoding="utf-8", errors="strict")
+                filename = real_path.name
+                extra_files[filename] = content
+                modified_code = modified_code.replace(ref, f"./{filename}")
+                logger.info("[AttachmentInjection] run_code extra_files: injected %s", filename)
+            except (UnicodeDecodeError, PermissionError):
+                # 二进制文件：改写为真实磁盘路径
+                real_path_str = str(real_path)
+                modified_code = modified_code.replace(ref, real_path_str)
+                logger.info(
+                    "[AttachmentInjection] run_code path rewrite: %s → %s", ref, real_path_str
+                )
+
+        if modified_code != code or extra_files:
+            return {**params, "code": modified_code, "extra_files": extra_files or None}
+        return params
 
 
 # ──────────────── 3. LoopDetectionMiddleware ────────────────

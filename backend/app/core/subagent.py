@@ -39,7 +39,7 @@ class SubAgentResult:
 
 # ── 角色配置 ─────────────────────────────────────────────
 
-SUBAGENT_TIMEOUT_SECONDS = 240
+SUBAGENT_TIMEOUT_SECONDS = 480
 
 SUBAGENT_ROLES: dict[str, dict[str, Any]] = {
     "code_analyst": {
@@ -50,9 +50,15 @@ SUBAGENT_ROLES: dict[str, dict[str, Any]] = {
             "<task>深入阅读用户提供的源码项目，产出结构化的 Markdown 分析报告。</task>\n"
             "<execution_policy>\n"
             "分析策略（按优先级）：\n"
-            "1. 若任务中包含 http(s):// URL → 执行远程仓库分析（见下方步骤）\n"
-            "2. 若本地环境存在可读取的项目文件 → 使用 parse_project / read_project_file 分析本地代码\n"
-            "3. 若既无 URL 又无本地文件 → 报告：\"❌ 未检测到项目。请提供 GitHub URL 或上传项目文件后重试。\" 然后停止，不要基于训练知识生成任何内容。\n"
+            "1. 若 <context> 中包含 extract_dir 字段 → 直接调用 read_project_file 读取文件\n"
+            "   - extract_dir 是已解压项目的磁盘路径，直接传给 read_project_file 的 extract_dir 参数\n"
+            "   - 【必须第一步】调用 read_project_file(extract_dir=<extract_dir值>, file_path=\".\") 获取完整文件树\n"
+            "   - 【禁止猜测路径】只能使用文件树中实际存在的路径构造后续调用，不得凭经验猜测文件位置\n"
+            "   - 若 <context> 中包含 covered_files 字段，这些文件已被主 Agent 读取分析，直接跳过，优先分析其余文件\n"
+            "   - 再逐一读取未覆盖的核心文件\n"
+            "2. 若任务中包含 http(s):// URL → 执行远程仓库分析（见下方步骤）\n"
+            "3. 若既无 extract_dir 又无 URL → 调用 parse_project 解析本地上传文件\n"
+            "4. 若以上均不适用 → 报告：\"❌ 未检测到项目。请提供 GitHub URL 或上传项目文件后重试。\" 然后停止。\n"
             "\n"
             "⚠️ 无论哪种路径，严禁将训练知识作为代码分析内容输出。只分析实际可读取的代码。\n"
             "</execution_policy>\n"
@@ -80,7 +86,7 @@ SUBAGENT_ROLES: dict[str, dict[str, Any]] = {
         ),
     },
     "researcher": {
-        "max_rounds": 12,
+        "max_rounds": 20,
         "tools": ["web_search", "fetch_url", "parse_document"],
         "system_prompt": (
             "<role>你是深度研究员 (Researcher Agent)。</role>\n"
@@ -189,6 +195,9 @@ async def run_subagent(
                         "agent_type": spec.agent_type,
                         "detail": msg_type,
                     })
+                elif msg_type in ("diagram_load", "diagram_session_synced"):
+                    # 直接透传到父 agent 的 send_fn，确保工作区图表事件到达前端
+                    await send_fn(msg)
 
             ctx, chain = factory.create_subagent(
                 spec=spec,
