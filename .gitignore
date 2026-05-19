@@ -54,6 +54,18 @@ backend/quick_test_*.py
 tmp/
 scripts/
 
+# Playwright
+.playwright-mcp/
+
+# Logs
+logs/
+
+# Build artifacts
+frontend/build.log
+
+# Images (local screenshots)
+*.png
+
 # Frontend
 frontend/src/components/webdeck/editor/
 *.tsbuildinfo
