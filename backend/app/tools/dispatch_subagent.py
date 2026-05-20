@@ -53,13 +53,19 @@ TOOL_DEFINITION: dict[str, Any] = {
 _send_fn_var: contextvars.ContextVar = contextvars.ContextVar("dispatch_send_fn", default=None)
 _task_var: contextvars.ContextVar = contextvars.ContextVar("dispatch_task", default=None)
 _model_var: contextvars.ContextVar = contextvars.ContextVar("dispatch_model", default=None)
+_api_key_var: contextvars.ContextVar = contextvars.ContextVar("dispatch_api_key", default=None)
+_base_url_var: contextvars.ContextVar = contextvars.ContextVar("dispatch_base_url", default=None)
+_is_reasoning_var: contextvars.ContextVar = contextvars.ContextVar("dispatch_is_reasoning", default=None)
 
 
-def set_runtime_context(send_fn, task, model=None):
+def set_runtime_context(send_fn, task, model=None, llm_api_key=None, llm_base_url=None, llm_is_reasoning_model=None):
     """在 tool dispatch 前设置运行时上下文（协程级隔离）。"""
     _send_fn_var.set(send_fn)
     _task_var.set(task)
     _model_var.set(model)
+    _api_key_var.set(llm_api_key)
+    _base_url_var.set(llm_base_url)
+    _is_reasoning_var.set(llm_is_reasoning_model)
 
 
 async def execute(params: dict[str, Any]) -> dict[str, Any]:
@@ -73,6 +79,9 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     send_fn = _send_fn_var.get(None)
     task = _task_var.get(None)
     model = _model_var.get(None)
+    llm_api_key = _api_key_var.get(None)
+    llm_base_url = _base_url_var.get(None)
+    llm_is_reasoning_model = _is_reasoning_var.get(None)
 
     if not send_fn or not task:
         return {"error": "dispatch_subagent 缺少运行时上下文，请重试"}
@@ -98,7 +107,7 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     logger.info(f"[dispatch_subagent] 派发 {len(specs)} 个子 agent: {[s.agent_type for s in specs]}")
 
     # 并发执行
-    tasks = [run_subagent(spec, task, send_fn, model) for spec in specs]
+    tasks = [run_subagent(spec, task, send_fn, model, llm_api_key, llm_base_url, llm_is_reasoning_model) for spec in specs]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # 汇总结果

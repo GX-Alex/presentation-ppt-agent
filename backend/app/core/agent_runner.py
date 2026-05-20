@@ -15,6 +15,14 @@ import json
 import logging
 import re
 import uuid
+
+try:
+    from json_repair import repair_json as _repair_json
+except ImportError:
+    _repair_json = None
+    logging.getLogger(__name__).warning(
+        "[AgentRunner] json_repair 未安装，webdeck_brief JSON 自动修复不可用"
+    )
 from dataclasses import replace
 from datetime import datetime
 from typing import Any, Callable, Awaitable
@@ -588,11 +596,24 @@ class AgentRunner:
         if not brief_match:
             return
 
+        raw_json = brief_match.group(1)
         try:
-            brief = json.loads(brief_match.group(1))
+            brief = json.loads(raw_json)
         except (json.JSONDecodeError, ValueError):
-            logger.warning("[AgentRunner] webdeck_brief JSON 解析失败，跳过自动触发")
-            return
+            # LLM 常将 pre_research.content 中的原始研究文本直接嵌入 JSON，
+            # 导致未转义的双引号/换行符破坏语法，使用 json_repair 自动修复。
+            if _repair_json is None:
+                logger.warning("[AgentRunner] json_repair 不可用，跳过自动触发")
+                return
+            try:
+                brief = _repair_json(raw_json, return_objects=True)
+                logger.info("[AgentRunner] webdeck_brief JSON 已通过 json_repair 修复")
+            except Exception as e:
+                logger.warning(
+                    "[AgentRunner] webdeck_brief JSON 修复失败，跳过自动触发: %s: %s",
+                    type(e).__name__, e,
+                )
+                return
 
         topic = str(brief.get("topic") or "").strip()
         if not topic:
@@ -758,7 +779,7 @@ class AgentRunner:
                 # 为 dispatch_subagent 注入运行时上下文
                 if tc.name == "dispatch_subagent":
                     from app.tools.dispatch_subagent import set_runtime_context
-                    set_runtime_context(ctx.send_fn, task, ctx.model)
+                    set_runtime_context(ctx.send_fn, task, ctx.model, ctx.llm_api_key, ctx.llm_base_url, ctx.llm_is_reasoning_model)
                     # 若本次请求已解压了项目压缩包，自动注入 extract_dir 到 code_analyst
                     _extract_dir = ctx.metadata.get("project_extract_dir")
                     if _extract_dir and isinstance(params, dict):

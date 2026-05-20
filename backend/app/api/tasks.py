@@ -1,4 +1,5 @@
 """Tasks API — 任务管理接口（CRUD）。"""
+import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -38,6 +39,72 @@ def _build_workspace_sync_content(artifact_type: str, content: str) -> str:
         f"当前工作区中的最新{label}已由用户手动编辑并保存。后续修改必须严格以此版本为准。\n\n"
         f"<general-artifact type=\"{artifact_type}\">\n{normalized}\n</general-artifact>"
     )
+
+
+def _build_message_list(messages: list) -> list[dict]:
+    """构建消息列表，为 tool_calls 和含 reasoning_content 的消息插入 thinking 记录，
+    确保刷新后思考过程面板能够复原。
+
+    Note:
+        合成的 thinking 消息在前端会进入 displayMessages 并显示于 ReasoningBubble；
+        原始的 tool_calls 消息在前端 loadMessages 中被路由到 executionSteps（ExecutionTimeline），
+        与实时执行期间的展示路径存在差异，属已知设计约束。
+    """
+    result = []
+    for m in sorted(messages, key=lambda x: x.created_at or datetime.min):
+        if m.role not in ("user", "assistant"):
+            continue
+
+        ts = m.created_at.isoformat() if m.created_at else None
+
+        # 1. reasoning_content (DeepSeek chain-of-thought)
+        if m.reasoning_content:
+            result.append({
+                "id": f"{m.id}_reasoning",
+                "role": "assistant",
+                "content": m.reasoning_content,
+                "type": "thinking",
+                "tool_name": None,
+                "created_at": ts,
+            })
+
+        # 2. intermediate text + tool execution status (from tool_calls message)
+        if m.msg_type == "tool_calls" and m.role == "assistant":
+            try:
+                data = json.loads(m.content or "{}")
+                text = (data.get("text") or "").strip()
+                if text:
+                    result.append({
+                        "id": f"{m.id}_thinking",
+                        "role": "assistant",
+                        "content": text,
+                        "type": "thinking",
+                        "tool_name": None,
+                        "created_at": ts,
+                    })
+                tool_calls = data.get("tool_calls") or []
+                if tool_calls:
+                    names = ", ".join(tc.get("name", "unknown") for tc in tool_calls)
+                    result.append({
+                        "id": f"{m.id}_status",
+                        "role": "system",
+                        "content": f"已执行工具: {names}",
+                        "type": "status",
+                        "tool_name": None,
+                        "created_at": ts,
+                    })
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+        result.append({
+            "id": m.id,
+            "role": m.role,
+            "content": m.content or "",
+            "type": m.msg_type or "text",
+            "tool_name": m.tool_name,
+            "created_at": ts,
+        })
+    return result
 
 
 @router.get("/")
@@ -107,18 +174,7 @@ async def get_task(task_id: str, session: AsyncSession = Depends(get_session)):
         "status": task.status,
         "intent": task.intent,
         "latest_checkpoint": latest_checkpoint,
-        "messages": [
-            {
-                "id": m.id,
-                "role": m.role,
-                "content": m.content or "",
-                "type": m.msg_type or "text",
-                "tool_name": m.tool_name,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-            }
-            for m in sorted(task.messages, key=lambda x: x.created_at or datetime.min)
-            if m.role in ("user", "assistant")
-        ],
+        "messages": _build_message_list(task.messages),
     }
 
 

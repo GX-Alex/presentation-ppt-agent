@@ -131,7 +131,9 @@ export function ChatPanel({ taskId }: ChatPanelProps) {
           loadMessages(restored);
         }
 
-        const latestArtifact = findLatestWorkspaceArtifact(data.messages || []);
+        const latestArtifact = findLatestWorkspaceArtifact(
+          (data.messages || []).filter((m: { type?: string }) => !m.type || m.type === "text")
+        );
 
         const webDeckResp = await fetch(`/api/webdeck/task/${taskId}`);
         const webDeckProject = webDeckResp.ok ? await webDeckResp.json() : null;

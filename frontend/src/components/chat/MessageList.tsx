@@ -374,18 +374,20 @@ function ExpandableContent({ content, isUser }: { content: string, isUser: boole
 function ReasoningBubble({
   messages,
   defaultExpanded,
+  isRunning,
 }: {
   messages: ChatMessage[];
   defaultExpanded: boolean;
+  isRunning: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(!defaultExpanded);
 
-  const title = messages.some((msg) => msg.type === "tool_calls")
+  const title = messages.some((msg) => msg.type === "tool_calls" || msg.type === "status")
     ? "推理与工具执行"
     : "思考过程";
 
   const stepCount = messages.length;
-  const hasRunning = defaultExpanded; // 如果是最新组且正在处理
+  const hasRunning = isRunning;
 
   return (
     <div className="flex justify-start my-2">
@@ -866,6 +868,11 @@ export function MessageList({ onSend, onOpenQualityDialog, isLoading }: { onSend
     renderItems.push({ kind: "message", msg });
   }
 
+  const lastReasoningIndex = renderItems.reduce(
+    (last, item, i) => (item.kind === "reasoning" ? i : last),
+    -1
+  );
+
   // 最新大纲消息的 id（只有最新大纲展示确认卡片）
   const latestOutlineId = messages.reduce(
     (last: string, m) => (m.type === "outline" ? m.id : last),
@@ -913,13 +920,14 @@ export function MessageList({ onSend, onOpenQualityDialog, isLoading }: { onSend
       {renderItems.map((item, index) => {
         if (item.kind === "reasoning") {
           const lastReasoningMessage = item.messages[item.messages.length - 1];
-          const isLatestReasoningGroup = index === renderItems.length - 1;
+          const isLatestReasoningGroup = index === lastReasoningIndex;
 
           return (
             <ReasoningBubble
               key={item.messages.map((msg) => msg.id).join("-")}
               messages={item.messages}
-              defaultExpanded={isProcessing && isLatestReasoningGroup && !!lastReasoningMessage}
+              defaultExpanded={isProcessing ? (isLatestReasoningGroup && !!lastReasoningMessage) : isLatestReasoningGroup}
+              isRunning={isProcessing && isLatestReasoningGroup && !!lastReasoningMessage}
             />
           );
         }

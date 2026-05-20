@@ -358,7 +358,7 @@ export function DeckPagePreview() {
   const totalPages = pages.length;
   const previewTitle = currentPage?.title || manifest?.topic || "Web Deck 预览";
   const exportTitle = manifest?.topic || previewTitle;
-  const isDeckViewAvailable = deckStatus === "completed" && Boolean(finalHtml);
+  const isDeckViewAvailable = Boolean(finalHtml);
   const isDeckView = isDeckViewAvailable && viewMode === "deck";
   const canGoPrevious = currentPageIndex > 0;
   const canGoNext = currentPageIndex < totalPages - 1;

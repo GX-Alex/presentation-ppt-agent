@@ -40,6 +40,9 @@ numpy==2.2.1
 # HTML 消毒
 bleach==6.2.0
 
+# JSON 修复（处理 LLM 生成的非法 JSON）
+json-repair==0.30.3
+
 # Utilities
 python-dotenv==1.0.1
 python-multipart==0.0.20

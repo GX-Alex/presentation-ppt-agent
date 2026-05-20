@@ -616,7 +616,7 @@ async function main() {
         returnByValue: true,
       });
       const value = ready.result.value || {};
-      if (value.href && value.href !== "about:blank" && value.ready !== "loading" && value.slides > 0) {
+      if (value.href && value.href !== "about:blank" && value.slides > 0) {
         break;
       }
       await wait(250);

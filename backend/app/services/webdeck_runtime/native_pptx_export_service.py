@@ -33,6 +33,71 @@ def _safe_title(title: str) -> str:
     return cleaned[:50] or "Web_Deck"
 
 
+# Matches external <script src="..."> tags pointing to CDN domains.
+# These block HTML parsing in headless Chrome and cause the export to hang
+# when the CDN is unreachable. ECharts CDN scripts are converted to async
+# (not removed) so the export script's waitForEchartsIfNeeded() can still
+# capture charts. All other CDN scripts are removed.
+_CDN_SCRIPT_RE = re.compile(
+    r'<script\s[^>]*src=["\']https?://[^"\']*["\'][^>]*>\s*</script>',
+    re.IGNORECASE,
+)
+
+# Injected immediately before the ECharts CDN <script async> tag.
+# Uses Object.defineProperty to intercept window.echarts = ... the instant
+# ECharts assigns itself, patching echarts.init to force SVG renderer before
+# any code (including the webdeck's own runtime) can call echarts.init with
+# the default canvas renderer.  Without this, fast CDN loads let the webdeck
+# runtime create canvas instances first; the export script's later patch has
+# no effect on already-created instances, causing intermittent blank charts.
+# NOTE: __webdeckSvgPatched is also checked by forceEchartsSvgRenderer() in
+# html_dom_to_editable_svg.js — keep the flag name in sync across both files.
+_ECHARTS_SVG_PATCHER = (
+    '<script>(function(){try{'
+    'var _e;'
+    'Object.defineProperty(window,"echarts",{'
+    'get:function(){return _e;},'
+    'set:function(v){'
+    '_e=v;'
+    'if(v&&v.init&&!v.__webdeckSvgPatched){'
+    'var o=v.init.bind(v);'
+    'v.init=function(d,t,p){return o(d,t,Object.assign({},p||{},{renderer:"svg"}));};'
+    'v.__webdeckSvgPatched=true;'
+    '}'
+    '},'
+    'configurable:true'
+    '});'
+    '}catch(e){}})();</script>'
+)
+
+
+def _handle_cdn_script(m: re.Match) -> str:
+    """Prepend SVG patcher + convert ECharts CDN to async; strip all other CDN scripts."""
+    src_match = re.search(r'src=["\']([^"\']*)["\']', m.group(0), re.IGNORECASE)
+    if src_match and "echarts" in src_match.group(1).lower():
+        tag = m.group(0)
+        if not re.search(r'\basync\b', tag, re.IGNORECASE):
+            tag = re.sub(r'<script\b', '<script async', tag, count=1, flags=re.IGNORECASE)
+        return _ECHARTS_SVG_PATCHER + tag
+    return ""
+
+
+def _strip_blocking_scripts(html: str) -> str:
+    """Remove/async-ify external CDN scripts before PPTX export.
+
+    Non-ECharts <script src="https://..."> in <head> block Chrome parsing when
+    the CDN is unreachable (20-second poll timeout). ECharts CDN scripts are
+    converted to async (non-blocking) and preceded by an SVG renderer patcher
+    that intercepts window.echarts assignment via Object.defineProperty, ensuring
+    every echarts.init call uses SVG renderer regardless of which code runs first.
+
+    webdeck-chart-init inline scripts are intentionally preserved — their
+    non-standard type makes Chrome treat them as inert data (non-blocking),
+    and the export script needs to execute them to initialise ECharts instances.
+    """
+    return _CDN_SCRIPT_RE.sub(_handle_cdn_script, html)
+
+
 async def export_webdeck_native_pptx(full_html: str, title: str) -> str:
     """Export a full WebDeck HTML document as native editable PPTX.
 
@@ -50,7 +115,7 @@ async def export_webdeck_native_pptx(full_html: str, title: str) -> str:
     output_path = EXPORT_DIR / output_filename
 
     run_dir.mkdir(parents=True, exist_ok=True)
-    html_path.write_text(full_html, encoding="utf-8")
+    html_path.write_text(_strip_blocking_scripts(full_html), encoding="utf-8")
 
     try:
         await _run_html_to_svg(html_path=html_path, project_dir=project_dir)

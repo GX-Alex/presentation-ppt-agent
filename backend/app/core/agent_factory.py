@@ -194,6 +194,9 @@ class AgentFactory:
         parent_task: Any,
         send_fn: Callable[[dict[str, Any]], Awaitable[None]],
         model: str | None = None,
+        llm_api_key: str | None = None,
+        llm_base_url: str | None = None,
+        llm_is_reasoning_model: bool | None = None,
     ) -> tuple["AgentContext", "MiddlewareChain"]:
         """为子 agent 构建独立的 context + chain。"""
         from app.core.subagent import SUBAGENT_ROLES
@@ -219,6 +222,12 @@ class AgentFactory:
             send_fn=send_fn,
         )
         ctx.system_prompt = role_cfg.get("system_prompt", "")
+        if llm_api_key is not None:
+            ctx.llm_api_key = llm_api_key
+        if llm_base_url is not None:
+            ctx.llm_base_url = llm_base_url
+        if llm_is_reasoning_model is not None:
+            ctx.llm_is_reasoning_model = llm_is_reasoning_model
 
         # 子 agent 用精简 chain — 只保留 tool_error 和 loop_detection
         chain = MiddlewareChain()

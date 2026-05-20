@@ -188,11 +188,14 @@ function _autoTriggerWebDeckGenerate(brief: WebDeckGenerateBrief, taskId?: strin
 function _detectAndTriggerWebDeckBrief(content: string, scopedTaskId?: string): string {
   const match = content.match(WEBDECK_BRIEF_REGEX);
   if (!match) return content;
+  const raw = match[1].trim();
   try {
-    const brief = JSON.parse(match[1].trim()) as WebDeckGenerateBrief;
+    const brief = JSON.parse(raw) as WebDeckGenerateBrief;
     _autoTriggerWebDeckGenerate(brief, scopedTaskId);
   } catch (e) {
-    console.error("[WS] webdeck_brief JSON 解析失败:", e);
+    // JSON 非法时（通常是 pre_research.content 含未转义引号），后端 json_repair 会修复并完整触发。
+    // 不做降级触发，避免以缺少 pre_research 的不完整 brief 抢先占位，阻断后端完整修复路径。
+    console.warn("[WS] webdeck_brief JSON 解析失败，等待后端 json_repair 修复:", (e as Error).message);
   }
   return content.replace(WEBDECK_BRIEF_REGEX, "\n> 🎯 *正在启动 Web Deck 生成流程...*\n");
 }

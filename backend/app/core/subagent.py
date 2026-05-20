@@ -151,6 +151,9 @@ async def run_subagent(
     parent_task: Any,
     send_fn: Callable[[dict[str, Any]], Awaitable[None]],
     model: str | None = None,
+    llm_api_key: str | None = None,
+    llm_base_url: str | None = None,
+    llm_is_reasoning_model: bool | None = None,
 ) -> SubAgentResult:
     """运行单个子 agent，返回结果。使用独立 DB session。"""
     from app.core.agent_factory import AgentFactory
@@ -204,6 +207,9 @@ async def run_subagent(
                 parent_task=parent_task,
                 send_fn=sub_send_fn,
                 model=model,
+                llm_api_key=llm_api_key,
+                llm_base_url=llm_base_url,
+                llm_is_reasoning_model=llm_is_reasoning_model,
             )
             ctx.session = session
 
@@ -253,6 +259,11 @@ async def run_subagent(
                             ),
                             messages=ctx.messages,
                             tools=None,
+                            model=model,
+                            task_id=ctx.task_id,
+                            api_key_override=ctx.llm_api_key,
+                            base_url_override=ctx.llm_base_url,
+                            is_reasoning_model=ctx.llm_is_reasoning_model,
                         ),
                         timeout=90.0,
                     )

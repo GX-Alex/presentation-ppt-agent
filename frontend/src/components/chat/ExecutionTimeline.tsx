@@ -152,13 +152,12 @@ function StepCard({ step }: { step: ExecutionStep }) {
 // ── ExecutionTimeline (主组件) ──
 export default function ExecutionTimeline() {
   const executionSteps = useChatStore((s) => s.executionSteps);
-  const [collapsed, setCollapsed] = useState(false);
-
-  if (executionSteps.length === 0) return null;
-
   const hasRunning = executionSteps.some(
     (s) => s.status === "running" || s.subAgents?.some((sa) => sa.status === "running")
   );
+  const [collapsed, setCollapsed] = useState(!hasRunning);
+
+  if (executionSteps.length === 0) return null;
 
   return (
     <div className="my-2 mx-1">
