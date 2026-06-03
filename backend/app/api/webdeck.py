@@ -440,7 +440,8 @@ async def export_deck_pptx(
     from app.services.webdeck_runtime.native_pptx_export_service import (
         export_webdeck_native_pptx,
     )
-    from app.services.webdeck_runtime.publish_service import republish_project
+    from app.services.webdeck_runtime.artifact_composer import DeckComposer
+    from app.services.webdeck_runtime.contracts import DeckManifest
 
     project = await deck_state_store.get_project(session, project_id)
     if not project:
@@ -450,16 +451,20 @@ async def export_deck_pptx(
     ready_pages = [p for p in pages if p.html]
 
     if not ready_pages:
-        raise HTTPException(status_code=400, detail="没有已完成的页面可导出，请等待所有页面生成完成")
+        still_running = any(p.status not in ("completed", "failed") for p in pages)
+        detail = (
+            "没有已完成的页面可导出，请等待页面生成完成"
+            if still_running
+            else "所有页面均已失败，无法导出，请先重试失败页面后再导出"
+        )
+        raise HTTPException(status_code=400, detail=detail)
 
     title = (project.manifest or {}).get("topic") or project.title or "Web Deck"
+    manifest = DeckManifest.from_dict(project.manifest or {})
 
     try:
-        _, full_html = await republish_project(
-            session=session,
-            project_id=project_id,
-            metadata={"source": "pptx_export"},
-        )
+        # 仅用有 HTML 的页面组装导出，跳过空页避免导出空白幻灯片
+        full_html = DeckComposer().compose(manifest, ready_pages)
         file_path = await export_webdeck_native_pptx(full_html, title)
     except Exception as exc:
         logger.exception("[WebDeck] PPTX 导出失败: %s", exc)
@@ -470,4 +475,6 @@ async def export_deck_pptx(
         "format": "pptx-native",
         "file_path": file_path,
         "download_url": f"/static/{file_path}",
+        "exported_pages": len(ready_pages),
+        "total_pages": len(pages),
     }

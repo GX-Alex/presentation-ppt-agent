@@ -106,6 +106,30 @@ let _isInitialized = false;
 let _reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 
+// ── 流式内容缓冲 — 合并高频 content_delta 为每帧一次更新，防止 React 超过 25 层嵌套渲染 ──
+let _streamContentBuffer = "";
+let _streamContentRafId: number | null = null;
+
+function _flushStreamBuffer(): void {
+  _streamContentRafId = null;
+  if (_streamContentBuffer) {
+    useChatStore.getState().appendStreamContent(_streamContentBuffer);
+    _streamContentBuffer = "";
+  }
+}
+
+function _cancelStreamBuffer(): void {
+  if (_streamContentRafId !== null) {
+    cancelAnimationFrame(_streamContentRafId);
+    _streamContentRafId = null;
+  }
+  _streamContentBuffer = "";
+}
+
+// ── 子 Agent 流式内容缓冲 ──
+const _subagentContentBuffers = new Map<string, string>();
+const _subagentContentRafIds = new Map<string, number>();
+
 // ── 断线消息保护 — 待发送消息队列 ──
 type PendingMessage = { payload: string; addedAt: number };
 const _pendingQueue: PendingMessage[] = [];
@@ -218,18 +242,23 @@ function _handleMessage(event: MessageEvent): void {
   switch (msgType) {
     case "stream_start": {
       if (!matchesCurrentTask) break;
+      _cancelStreamBuffer();
       store.startStream(scopedTaskId || store.taskId || "unknown");
       break;
     }
 
     case "content_delta": {
       if (!matchesCurrentTask) break;
-      store.appendStreamContent((data.content as string) || "");
+      _streamContentBuffer += (data.content as string) || "";
+      if (_streamContentRafId === null) {
+        _streamContentRafId = requestAnimationFrame(_flushStreamBuffer);
+      }
       break;
     }
 
     case "stream_end": {
       if (!matchesCurrentTask) break;
+      _cancelStreamBuffer();
       const messageId = (data.message_id as string) || "";
       let fullContent = (data.content as string) || "";
       const error = data.error as boolean | undefined;
@@ -554,14 +583,8 @@ function _handleMessage(event: MessageEvent): void {
 
     case "processing_done": {
       _finishTaskProcessing(scopedTaskId);
-      // 清理执行步骤 — 标记完成
       if (matchesCurrentTask) {
-        const steps = store.executionSteps;
-        steps.forEach((step) => {
-          if (step.status === "running") {
-            store.updateExecutionStep(step.id, { status: "completed" });
-          }
-        });
+        store.bulkCompleteExecutionSteps();
       }
       break;
     }
@@ -715,13 +738,21 @@ function _handleMessage(event: MessageEvent): void {
     case "subagent_content_delta": {
       if (!matchesCurrentTask) break;
       const saId = data.agent_id as string;
-      const existing2 = store.executionSteps
-        .flatMap((s) => s.subAgents || [])
-        .find((sa) => sa.agentId === saId);
-      if (existing2) {
-        store.updateSubAgent(saId, {
-          result: (existing2.result || "") + ((data.content as string) || ""),
-        });
+      _subagentContentBuffers.set(saId, (_subagentContentBuffers.get(saId) || "") + ((data.content as string) || ""));
+      if (!_subagentContentRafIds.has(saId)) {
+        _subagentContentRafIds.set(saId, requestAnimationFrame(() => {
+          const buffered = _subagentContentBuffers.get(saId) || "";
+          _subagentContentBuffers.delete(saId);
+          _subagentContentRafIds.delete(saId);
+          if (!buffered) return;
+          const s = useChatStore.getState();
+          const existing = s.executionSteps
+            .flatMap((step) => step.subAgents || [])
+            .find((sa) => sa.agentId === saId);
+          if (existing) {
+            s.updateSubAgent(saId, { result: (existing.result || "") + buffered });
+          }
+        }));
       }
       break;
     }
@@ -730,6 +761,15 @@ function _handleMessage(event: MessageEvent): void {
       if (!matchesCurrentTask) break;
       const saIdComplete = data.agent_id as string;
       const saStatus = (data.status as string) === "completed" ? "completed" : "failed";
+
+      // 取消该 agent 的待处理 rAF，防止旧 delta 在 summary 写入后追加
+      const pendingRafId = _subagentContentRafIds.get(saIdComplete);
+      if (pendingRafId !== undefined) {
+        cancelAnimationFrame(pendingRafId);
+        _subagentContentRafIds.delete(saIdComplete);
+      }
+      _subagentContentBuffers.delete(saIdComplete);
+
       store.updateSubAgent(saIdComplete, {
         status: saStatus as "completed" | "failed",
         duration: (data.duration_ms as number) || 0,
@@ -742,11 +782,14 @@ function _handleMessage(event: MessageEvent): void {
         return step.subAgents?.every((sa) => sa.status === "completed" || sa.status === "failed");
       });
       if (allDone) {
-        freshState.executionSteps.forEach((step) => {
-          if (step.type === "subagent_dispatch" && step.status === "running") {
-            freshState.updateExecutionStep(step.id, { status: "completed", duration: Date.now() - (step.startTime || Date.now()) });
-          }
-        });
+        const now = Date.now();
+        useChatStore.setState((state) => ({
+          executionSteps: state.executionSteps.map((step) =>
+            step.type === "subagent_dispatch" && step.status === "running"
+              ? { ...step, status: "completed" as const, duration: now - (step.startTime || now) }
+              : step
+          ),
+        }));
       }
       store.addMessage({
         id: crypto.randomUUID(),
@@ -796,6 +839,11 @@ function _connect(): void {
     if (store.streamingMessage) {
       store.cancelStream();
     }
+    _cancelStreamBuffer();
+    // 清理所有子 Agent 的待处理 rAF 和缓冲区
+    _subagentContentRafIds.forEach((rafId) => cancelAnimationFrame(rafId));
+    _subagentContentRafIds.clear();
+    _subagentContentBuffers.clear();
     _stopHeartbeat();
     _ws = null;
 

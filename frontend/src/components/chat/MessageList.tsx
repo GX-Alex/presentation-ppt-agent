@@ -481,6 +481,8 @@ function OutlineConfirmCard({
 }) {
   const [confirmText, setConfirmText] = useState("好的，确认，开始生成幻灯片");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
+  isSubmittingRef.current = isSubmitting;
   const pptState = useChatStore((s) => s.pptState);
   const isProcessing = useChatStore((s) => s.isProcessing);
   const currentArtifactType = useChatStore((s) => s.currentArtifactType);
@@ -497,15 +499,12 @@ function OutlineConfirmCard({
     setConfirmText(isWebDeckPlanReady ? "好的，确认，开始生成 Web Deck" : "好的，确认，开始生成幻灯片");
   }, [isWebDeckPlanReady]);
 
-  // P2-7: 当处理状态变化时重置提交中状态（不再依赖 setTimeout）
+  // P2-7: 当后端处理完成时重置提交中状态（仅在 isProcessing false 后触发，避免提交后立即重置）
   useEffect(() => {
-    if (isSubmitting && isProcessing) {
-      // 后端已接收，等 isProcessing 变回 false 时重置
-    }
-    if (isSubmitting && !isProcessing) {
+    if (!isProcessing && isSubmittingRef.current) {
       setIsSubmitting(false);
     }
-  }, [isProcessing, isSubmitting]);
+  }, [isProcessing]);
 
   const handleConfirm = () => {
     if (disabled) return;

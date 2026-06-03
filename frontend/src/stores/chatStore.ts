@@ -262,6 +262,7 @@ interface ChatStore {
   clearExecutionSteps: () => void;
   addSubAgentToStep: (stepId: string, subAgent: SubAgentState) => void;
   updateSubAgent: (agentId: string, updates: Partial<SubAgentState>) => void;
+  bulkCompleteExecutionSteps: () => void;
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -604,4 +605,14 @@ export const useChatStore = create<ChatStore>((set) => ({
         };
       }),
     })),
+  bulkCompleteExecutionSteps: () => {
+    const now = Date.now();
+    return set((state) => ({
+      executionSteps: state.executionSteps.map((s) =>
+        s.status === "running" || s.status === "pending"
+          ? { ...s, status: "completed" as const, duration: now - (s.startTime || now) }
+          : s
+      ),
+    }));
+  },
 }));

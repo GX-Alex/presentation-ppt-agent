@@ -343,6 +343,28 @@ class LaneScheduler:
             logger.exception("[Scheduler] 页面重试失败: page=%s: %s", page_id, e)
             raise
 
+        # 重试完成后重新发布整稿，确保前端 finalHtml 和 PPTX 导出使用最新内容
+        # 注意：republish_project 会包含空页占位（deck-page--empty），前端预览显示当前状态；
+        # PPTX 导出侧单独过滤只用有 HTML 的页面，两者策略不同，属有意设计
+        from app.services.webdeck_runtime.publish_service import republish_project
+        try:
+            async with async_session() as pub_session:
+                publish, full_html = await republish_project(
+                    session=pub_session,
+                    project_id=project_id,
+                    metadata={"source": "retry_complete"},
+                )
+                pub_pages = await deck_state_store.get_pages(pub_session, project_id)
+                await send_fn({
+                    "type": "webdeck_complete",
+                    "project_id": project_id,
+                    "version": publish.version,
+                    "html": full_html,
+                    "page_count": len(pub_pages),
+                })
+        except Exception as pub_err:
+            logger.warning("[Scheduler] retry_page 发布更新失败，前端 finalHtml 可能未刷新: %s", pub_err)
+
     async def retry_lane(
         self,
         session: AsyncSession,
