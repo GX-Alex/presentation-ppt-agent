@@ -4,9 +4,12 @@
 每个主题包含 CSS 变量和 reveal.js 配置。
 """
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_REVEAL_JS_BASE = os.getenv("REVEAL_JS_BASE_URL", "/vendor/reveal.js")
 
 # ──────────────── 内置主题定义 ────────────────
 
@@ -304,8 +307,8 @@ def build_reveal_html(slides_html: list[str], theme_id: str, title: str = "Prese
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.min.css" id="theme">
+    <link rel="stylesheet" href="{_REVEAL_JS_BASE}/reveal.min.css">
+    <link rel="stylesheet" href="{_REVEAL_JS_BASE}/theme/black.min.css" id="theme">
     <style>
         :root {{
             --r-background-color: {css_vars['backgroundColor']};
@@ -371,7 +374,7 @@ def build_reveal_html(slides_html: list[str], theme_id: str, title: str = "Prese
 {sections}
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.min.js"></script>
+    <script src="{_REVEAL_JS_BASE}/reveal.min.js"></script>
     <script>
         let revealReady = false;
 
