@@ -36,6 +36,25 @@ TOOL_DEFINITION: dict[str, Any] = {
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 HTTPX_TIMEOUT = 15.0  # 秒
+INTRANET_SEARCH_URL = os.getenv("INTRANET_SEARCH_URL", "")
+
+
+async def _intranet_search(query: str, max_results: int) -> list[dict[str, str]] | None:
+    """Call intranet search API. Returns None if not configured or on failure."""
+    if not INTRANET_SEARCH_URL:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
+            resp = await client.post(
+                INTRANET_SEARCH_URL,
+                json={"query": query, "max_results": max_results},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("results", [])
+    except Exception as exc:
+        logger.warning("[web_search] 内网搜索失败: %s", exc)
+        return None
 
 
 async def execute(params: dict[str, Any]) -> dict[str, Any]:
@@ -53,6 +72,11 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
 
     if not query.strip():
         return {"error": "搜索查询不能为空"}
+
+    # 优先使用内网搜索
+    intranet_results = await _intranet_search(query, max_results)
+    if intranet_results is not None:
+        return {"results": intranet_results, "source": "intranet"}
 
     # 优先尝试 Tavily
     if TAVILY_API_KEY:
