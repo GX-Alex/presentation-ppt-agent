@@ -10,6 +10,8 @@ import { useChatStore, type SlideMetadata } from "@/stores/chatStore";
 import { ExportPanel } from "./ExportPanel";
 import { useToast } from "@/components/ui/Toast";
 
+const REVEAL_JS_BASE = process.env.NEXT_PUBLIC_REVEAL_JS_BASE_URL ?? "/vendor/reveal.js";
+
 /** 根据主题配置生成 CSS 变量 */
 function getThemeCSS(themeId: string): { bg: string; headingColor: string; textColor: string; slideCSS: string } {
   const themes: Record<string, { bg: string; headingColor: string; textColor: string; slideCSS: string }> = {
@@ -67,8 +69,8 @@ function buildRevealHTML(slidesHtml: string[], themeId: string, title: string): 
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.min.css" id="theme">
+  <link rel="stylesheet" href="${REVEAL_JS_BASE}/reveal.min.css">
+  <link rel="stylesheet" href="${REVEAL_JS_BASE}/theme/black.min.css" id="theme">
   <style>
     :root {
       --r-background-color: ${theme.bg};
@@ -187,7 +189,7 @@ function buildRevealHTML(slidesHtml: string[], themeId: string, title: string): 
       ${sections || '<section><h2>等待内容生成...</h2></section>'}
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.min.js"></script>
+  <script src="${REVEAL_JS_BASE}/reveal.min.js"></script>
   <script>
     let revealReady = false;
 
