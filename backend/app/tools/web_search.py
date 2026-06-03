@@ -73,10 +73,17 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     if not query.strip():
         return {"error": "搜索查询不能为空"}
 
+    offline_mode = os.getenv("OFFLINE_MODE", "").lower() == "true"
+
     # 优先使用内网搜索
     intranet_results = await _intranet_search(query, max_results)
     if intranet_results is not None:
         return {"results": intranet_results, "source": "intranet"}
+
+    # 离线模式下：内网搜索未配置或失败，禁止回退到外网 Tavily/DuckDuckGo
+    if offline_mode:
+        logger.warning("[web_search] 离线模式：内网搜索未配置或失败，拒绝回退外网")
+        return {"error": "离线模式下未配置可用的内网搜索", "query": query}
 
     # 优先尝试 Tavily
     if TAVILY_API_KEY:

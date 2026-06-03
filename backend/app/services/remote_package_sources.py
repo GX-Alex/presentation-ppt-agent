@@ -106,16 +106,20 @@ class RemotePackageImportError(RuntimeError):
 
 async def fetch_remote_package_bundle(source_id: str) -> RemotePackageBundle:
     if os.getenv("OFFLINE_MODE", "").lower() == "true":
-        raise ValueError(f"离线模式：跳过远程插件拉取 ({source_id})")
+        raise RemotePackageImportError(f"离线模式：跳过远程插件拉取 ({source_id})")
     spec = REMOTE_PACKAGE_SOURCES.get(source_id)
     if spec is None:
-        raise ValueError("未知的远端包源")
+        raise RemotePackageImportError("未知的远端包源")
 
     return await fetch_remote_package_bundle_from_spec(spec)
 
 
 async def fetch_remote_package_bundle_from_spec(spec: GitHubRemoteSource) -> RemotePackageBundle:
     """Fetch a remote bundle from an explicit GitHub source spec."""
+
+    # Defense-in-depth: even if a caller bypasses the public wrapper, OFFLINE_MODE still applies.
+    if os.getenv("OFFLINE_MODE", "").lower() == "true":
+        raise RemotePackageImportError(f"离线模式：跳过远程插件拉取 ({spec.source_id})")
 
     if spec.source_id == "minimax.pptx-plugin":
         raise RemotePackageImportError("minimax.pptx-plugin 已下线，因为平台已移除原生 PPTX 导出链路")
