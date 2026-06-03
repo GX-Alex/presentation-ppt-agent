@@ -105,6 +105,8 @@ class RemotePackageImportError(RuntimeError):
 
 
 async def fetch_remote_package_bundle(source_id: str) -> RemotePackageBundle:
+    if os.getenv("OFFLINE_MODE", "").lower() == "true":
+        raise ValueError(f"离线模式：跳过远程插件拉取 ({source_id})")
     spec = REMOTE_PACKAGE_SOURCES.get(source_id)
     if spec is None:
         raise ValueError("未知的远端包源")
