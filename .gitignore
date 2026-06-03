@@ -37,7 +37,6 @@ backend/data/*
 
 # Outputs & Docs
 outputs/
-docs/plans/
 
 # OS
 .DS_Store
@@ -52,7 +51,6 @@ backend/quick_test_*.py
 
 # Utility
 tmp/
-scripts/
 
 # Playwright
 .playwright-mcp/
