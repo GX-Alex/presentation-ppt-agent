@@ -172,8 +172,6 @@ class DeckComposer:
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title}</title>
-  <!-- P1: Iconify 图标库 CDN -->
-  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
   <script src="{_ECHARTS_JS_URL}"></script>
   <style>
     /* ── Reset ── */
@@ -337,8 +335,6 @@ class DeckComposer:
     .s-table td {{ padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(var(--s-surface-rgb), 0.08); font-size: 0.875rem; }}
     .s-table tr:last-child td {{ border-bottom: none; }}
     .s-divider {{ height: 1px; background: rgba(var(--s-surface-rgb), 0.12); margin: 0.75rem 0; }}
-    iconify-icon {{ display: inline-block; vertical-align: middle; }}
-
     /* ── 打印：每页独立输出 ── */
     @media print {{
       #deck-nav-overlay, #deck-progress {{ display: none !important; }}
@@ -373,11 +369,11 @@ class DeckComposer:
   <!-- P0: 右下角幽灵导航 -->
   <div id="deck-nav-overlay">
     <button class="deck-nav-btn" id="prevBtn" onclick="prevPage()" aria-label="上一页" title="上一页 (←)">
-      <iconify-icon icon="mdi:chevron-left"></iconify-icon>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
     </button>
     <span id="deck-page-indicator">1 / {total_pages}</span>
     <button class="deck-nav-btn" id="nextBtn" onclick="nextPage()" aria-label="下一页" title="下一页 (→)">
-      <iconify-icon icon="mdi:chevron-right"></iconify-icon>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
     </button>
   </div>
 
