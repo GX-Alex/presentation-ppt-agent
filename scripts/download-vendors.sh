@@ -1,10 +1,11 @@
 #!/bin/bash
 set -e
+cd "$(dirname "$0")/.."
 VENDOR_DIR="frontend/public/vendor"
 mkdir -p "$VENDOR_DIR/reveal.js/theme"
 
 echo "Downloading ECharts..."
-curl -fL "https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" \
+curl -fL "https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" \
   -o "$VENDOR_DIR/echarts.min.js"
 
 echo "Downloading Reveal.js..."
