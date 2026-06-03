@@ -8,6 +8,7 @@ Lane Runner — 子任务执行器 (对齐 high.md §5.3.4 Specialized Subagents
 import asyncio as _asyncio
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from typing import Any
@@ -24,6 +25,8 @@ from app.services.webdeck_runtime.contracts import LaneKind, LaneStatus, PageKin
 from app.services.webdeck_runtime.state_store import deck_state_store
 
 logger = logging.getLogger(__name__)
+
+_ECHARTS_JS_URL = os.getenv("ECHARTS_JS_URL", "/vendor/echarts.min.js")
 
 
 def _hex_to_rgba(hex_color: str, alpha: float) -> str:
@@ -450,7 +453,7 @@ class LaneRunner:
   </div>
   <div id="{container_id}" style="width:100%;height:260px;"></div>
   <div style="font-size:12px;line-height:1.6;color:{text};">{model['roi_formula']}。假设一次性建设投入 {model['initial_investment']} 万元，首年综合回报 {model['first_year_return']} 万元，第 {model['payback_months']} 个月达到累计回报与初始投入持平。</div>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="{_ECHARTS_JS_URL}"></script>
   <script>(function(){{const el=document.getElementById({json.dumps(container_id, ensure_ascii=False)});if(!el||typeof echarts==='undefined') return;const chart=echarts.init(el);chart.setOption({json.dumps(option, ensure_ascii=False)});window.addEventListener('resize',()=>chart.resize());}})();</script>
 </div>'''
         else:
@@ -527,7 +530,7 @@ class LaneRunner:
     <span>AI 方案总成本 {sum(ai)} 万元/年</span>
     <span>成本节省 {model['annual_cost_savings']} 万元/年</span>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="{_ECHARTS_JS_URL}"></script>
   <script>(function(){{const el=document.getElementById({json.dumps(container_id, ensure_ascii=False)});if(!el||typeof echarts==='undefined') return;const chart=echarts.init(el);chart.setOption({json.dumps(option, ensure_ascii=False)});window.addEventListener('resize',()=>chart.resize());}})();</script>
 </div>'''
 

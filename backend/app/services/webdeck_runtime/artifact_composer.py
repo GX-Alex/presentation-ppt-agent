@@ -4,6 +4,7 @@ Deck Composer — 最终组装器 (对齐 high.md §5.3.5 Deck Integrator)。
 生成: 路由、目录、主题、页面切换、进度条、URL 同步。
 """
 import logging
+import os
 import re
 from typing import Any
 
@@ -11,6 +12,8 @@ from app.models.tables import DeckPage
 from app.services.webdeck_runtime.contracts import DeckManifest, DeckShellConfig
 
 logger = logging.getLogger(__name__)
+
+_ECHARTS_JS_URL = os.getenv("ECHARTS_JS_URL", "/vendor/echarts.min.js")
 
 _ECHARTS_CDN_SCRIPT_RE = re.compile(
   r'<script[^>]+src=["\']https://cdn\.jsdelivr\.net/npm/echarts@5/dist/echarts\.min\.js["\'][^>]*>\s*</script>',
@@ -171,7 +174,7 @@ class DeckComposer:
   <title>{title}</title>
   <!-- P1: Iconify 图标库 CDN -->
   <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="{_ECHARTS_JS_URL}"></script>
   <style>
     /* ── Reset ── */
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
