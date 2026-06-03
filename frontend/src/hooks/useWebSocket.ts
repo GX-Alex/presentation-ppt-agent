@@ -45,6 +45,15 @@ const RECONNECT_BASE_DELAY = 1000;
 const RECONNECT_MAX_DELAY = 30000;
 const RECONNECT_MULTIPLIER = 2;
 const HEARTBEAT_INTERVAL = 25000;
+
+// Chrome 90 及以下不支持 crypto.randomUUID，降级用时间戳+随机数
+let _idCounter = 0;
+function genId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${++_idCounter}`;
+}
 function normalizeWebDeckBrief(brief: WebDeckGenerateBrief): WebDeckGenerateBrief {
   return {
     ...brief,
@@ -301,7 +310,7 @@ function _handleMessage(event: MessageEvent): void {
       }
 
       const msg: ChatMessage = {
-        id: (data.message_id as string) || crypto.randomUUID(),
+        id: (data.message_id as string) || genId(),
         role: (data.role as ChatMessage["role"]) || "assistant",
         content: rawContent,
         type: (data.message_type as string) || "text",
@@ -339,7 +348,7 @@ function _handleMessage(event: MessageEvent): void {
     case "thinking": {
       if (!matchesCurrentTask) break;
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "assistant",
         content: (data.content as string) || "",
         type: "thinking",
@@ -351,7 +360,7 @@ function _handleMessage(event: MessageEvent): void {
     case "status": {
       if (!matchesCurrentTask) break;
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: (data.text as string) || "",
         type: "status",
@@ -377,7 +386,7 @@ function _handleMessage(event: MessageEvent): void {
       if (taskId) store.setTask(taskId, intent);
 
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: `检测到意图: ${intent}`,
         type: "status",
@@ -412,7 +421,7 @@ function _handleMessage(event: MessageEvent): void {
       const shouldSurfaceStatus = !(rawStatus === "failed" && _isWebDeckReviewRelatedMessage(message));
       if (shouldSurfaceStatus) {
         store.addMessage({
-          id: crypto.randomUUID(),
+          id: genId(),
           role: "system",
           content: message ? `Web Deck 状态: ${rawStatus}\n${message}` : `Web Deck 状态: ${rawStatus}`,
           type: "status",
@@ -436,7 +445,7 @@ function _handleMessage(event: MessageEvent): void {
       deckStore.initPages(buildShellPagesFromManifest(manifest));
       store.setCurrentArtifactType("webdeck");
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "assistant",
         content: `Web Deck 大纲已生成 (${manifest.totalPages} 页)\n\n${formatWebDeckManifestSummary(manifest)}`,
         type: "outline",
@@ -508,7 +517,7 @@ function _handleMessage(event: MessageEvent): void {
 
       if (status === "failed" && !_isWebDeckReviewRelatedMessage(error)) {
         store.addMessage({
-          id: crypto.randomUUID(),
+          id: genId(),
           role: "system",
           content: `Web Deck 页面生成失败: ${title}${error ? `\n${error}` : ""}`,
           type: "error",
@@ -593,7 +602,7 @@ function _handleMessage(event: MessageEvent): void {
       _finishTaskProcessing(scopedTaskId);
       if (!matchesCurrentTask) break;
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: `❌ ${(data.message as string) || "未知错误"}`,
         type: "error",
@@ -614,7 +623,7 @@ function _handleMessage(event: MessageEvent): void {
       const displayName = data.display_name as string;
       if (skillName) store.addActiveSkill(skillName);
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: `🔌 已加载 Skill: ${displayName || skillName}`,
         type: "status",
@@ -638,7 +647,7 @@ function _handleMessage(event: MessageEvent): void {
         store.setMemoryCount(store.memoryCount + 1);
       }
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: `🧠 ${action === "updated" ? "更新" : "捕获"}记忆: [${category}] ${(memContent || "").slice(0, 60)}`,
         type: "status",
@@ -665,7 +674,7 @@ function _handleMessage(event: MessageEvent): void {
       if (!matchesCurrentTask) break;
       const alertMsg = data.message as string;
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: alertMsg || "⚠️ Token 用量接近上限",
         type: "error",
@@ -677,7 +686,7 @@ function _handleMessage(event: MessageEvent): void {
     case "compact_done": {
       if (!matchesCurrentTask) break;
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: `📦 上下文已压缩: ${data.compressed_count || 0} 条消息已归档`,
         type: "status",
@@ -700,7 +709,7 @@ function _handleMessage(event: MessageEvent): void {
         steps: [],
       });
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: `子 Agent 已启动: ${data.agent_type}`,
         type: "status",
@@ -792,7 +801,7 @@ function _handleMessage(event: MessageEvent): void {
         }));
       }
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "system",
         content: `子 Agent ${data.agent_type} ${saStatus === "completed" ? "完成" : "失败"} (${((data.duration_ms as number) || 0) / 1000}s)`,
         type: "status",
@@ -853,7 +862,7 @@ function _connect(): void {
       if (_reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
         console.error(`[WS] 已超过最大重连次数 (${MAX_RECONNECT_ATTEMPTS})，停止重连`);
         store.addMessage({
-          id: crypto.randomUUID(),
+          id: genId(),
           role: "system",
           content: "网络连接已断开且多次重连失败，请检查网络后手动刷新页面。",
           type: "error",
@@ -912,7 +921,7 @@ export function useWebSocket(): UseWebSocketReturn {
       });
 
       useChatStore.getState().addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "user",
         content,
         type: "text",
@@ -924,7 +933,7 @@ export function useWebSocket(): UseWebSocketReturn {
         console.warn("[WS] 连接未就绪，消息已暂存");
         _enqueuePending(payload);
         useChatStore.getState().addMessage({
-          id: crypto.randomUUID(),
+          id: genId(),
           role: "system",
           content: "消息已暂存，恢复连接后自动发送",
           type: "status",
@@ -1000,7 +1009,7 @@ export function useWebSocket(): UseWebSocketReturn {
       const deckStore = useDeckStore.getState();
       deckStore.resetDeck();
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "user",
         content: `🎯 生成 Web Deck\n主题: ${normalizedBrief.topic}\n受众: ${normalizedBrief.audience || "通用"}\n页数: ${normalizedBrief.page_count || "自动"}`,
         type: "text",
@@ -1026,7 +1035,7 @@ export function useWebSocket(): UseWebSocketReturn {
       if (!_ws || _ws.readyState !== WebSocket.OPEN) return;
       const store = useChatStore.getState();
       store.addMessage({
-        id: crypto.randomUUID(),
+        id: genId(),
         role: "user",
         content: "✅ 确认大纲，开始生成 Web Deck",
         type: "text",

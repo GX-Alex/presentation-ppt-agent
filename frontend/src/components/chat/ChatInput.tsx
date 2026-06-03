@@ -90,7 +90,7 @@ export function ChatInput({ onSend, onQualityGenerate, showQualityDialog = false
 
       const payload = await response.json();
       addMessage({
-        id: (payload.message_id as string) || crypto.randomUUID(),
+        id: (payload.message_id as string) || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         role: "user",
         content: (payload.content as string) || buildWorkspaceSyncMessage(currentArtifactType, currentContent),
         type: "workspace_sync",
