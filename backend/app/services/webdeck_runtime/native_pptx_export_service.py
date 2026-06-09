@@ -10,6 +10,7 @@ Pipeline:
 from __future__ import annotations
 
 import asyncio
+from html import escape as html_escape
 import logging
 import os
 import re
@@ -18,6 +19,7 @@ import uuid
 from pathlib import Path
 
 from app.services.export_service import BACKEND_ROOT, EXPORT_DIR
+from app.services.webdeck_runtime.pptx_native.fontawesome_subset import FA_SOLID_ICONS
 from app.services.webdeck_runtime.pptx_native.svg_to_pptx import create_pptx_with_native_svg
 
 logger = logging.getLogger(__name__)
@@ -27,10 +29,113 @@ HTML_TO_SVG_SCRIPT = PPTX_NATIVE_DIR / "html_dom_to_editable_svg.js"
 WORK_DIR = BACKEND_ROOT / "data" / "tmp" / "webdeck_native_pptx"
 WORK_DIR.mkdir(parents=True, exist_ok=True)
 
+FONTAWESOME_INLINE_STYLE = """
+<style id="webdeck-fontawesome-inline-svg">
+  .fa-inline-svg {
+    display: inline-block !important;
+    width: 1em !important;
+    height: 1em !important;
+    vertical-align: -0.125em !important;
+    color: inherit;
+    fill: currentColor;
+    flex: none !important;
+  }
+  .fa-inline-svg path {
+    fill: currentColor;
+  }
+</style>
+"""
+
 
 def _safe_title(title: str) -> str:
     cleaned = re.sub(r"[^\w\u4e00-\u9fff-]", "_", title or "Web Deck")
     return cleaned[:50] or "Web_Deck"
+
+
+def _fontawesome_icon_name(classes: str) -> str | None:
+    ignored = {
+        "fa",
+        "fas",
+        "far",
+        "fab",
+        "fal",
+        "fad",
+        "fa-solid",
+        "fa-regular",
+        "fa-brands",
+        "fa-fw",
+        "fa-lg",
+        "fa-xs",
+        "fa-sm",
+        "fa-1x",
+        "fa-2x",
+        "fa-3x",
+        "fa-4x",
+        "fa-5x",
+        "fa-6x",
+        "fa-7x",
+        "fa-8x",
+        "fa-9x",
+        "fa-10x",
+    }
+    for cls in classes.split():
+        if cls.startswith("fa-") and cls not in ignored:
+            return cls.removeprefix("fa-")
+    return None
+
+
+def _inline_fontawesome_icons(html: str) -> tuple[str, int]:
+    """Convert Font Awesome <i> icons into inline SVG paths before browser layout."""
+    count = 0
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal count
+        attrs = match.group(1)
+        class_match = re.search(
+            r'\bclass\s*=\s*(["\'])(.*?)\1',
+            attrs,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if not class_match:
+            return match.group(0)
+        classes = class_match.group(2)
+        icon_name = _fontawesome_icon_name(classes)
+        icon = FA_SOLID_ICONS.get(icon_name or "")
+        if not icon:
+            return match.group(0)
+
+        style_match = re.search(
+            r'\bstyle\s*=\s*(["\'])(.*?)\1',
+            attrs,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        style = style_match.group(2) if style_match else ""
+        width, height, path_data = icon
+        count += 1
+        return (
+            f'<svg class="fa-inline-svg {html_escape(classes, quote=True)}" '
+            f'viewBox="0 0 {width} {height}" aria-hidden="true" focusable="false" '
+            f'style="{html_escape(style, quote=True)};overflow:visible;">'
+            f'<path fill="currentColor" d="{html_escape(path_data, quote=True)}"></path>'
+            f"</svg>"
+        )
+
+    next_html = re.sub(r"<i\b([^>]*)>\s*</i>", repl, html, flags=re.IGNORECASE | re.DOTALL)
+    if count:
+        next_html = re.sub(
+            r"<link\b[^>]*(?:font-awesome|fontawesome)[^>]*>",
+            "",
+            next_html,
+            flags=re.IGNORECASE,
+        )
+        next_html = re.sub(
+            r"</head\s*>",
+            FONTAWESOME_INLINE_STYLE + "\n</head>",
+            next_html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+    return next_html, count
 
 
 # Matches external <script src="..."> tags pointing to CDN domains.
@@ -98,6 +203,14 @@ def _strip_blocking_scripts(html: str) -> str:
     return _CDN_SCRIPT_RE.sub(_handle_cdn_script, html)
 
 
+def _prepare_native_export_html(full_html: str) -> str:
+    html = _strip_blocking_scripts(full_html)
+    html, icon_count = _inline_fontawesome_icons(html)
+    if icon_count:
+        logger.info("[WebDeck] inlined %d Font Awesome icons for native PPTX export", icon_count)
+    return html
+
+
 async def export_webdeck_native_pptx(full_html: str, title: str) -> str:
     """Export a full WebDeck HTML document as native editable PPTX.
 
@@ -115,7 +228,7 @@ async def export_webdeck_native_pptx(full_html: str, title: str) -> str:
     output_path = EXPORT_DIR / output_filename
 
     run_dir.mkdir(parents=True, exist_ok=True)
-    html_path.write_text(_strip_blocking_scripts(full_html), encoding="utf-8")
+    html_path.write_text(_prepare_native_export_html(full_html), encoding="utf-8")
 
     try:
         await _run_html_to_svg(html_path=html_path, project_dir=project_dir)
